@@ -1,0 +1,27 @@
+{
+  "resources": {
+    "includes": [
+      {
+        "pattern": "org/mariadb/jdbc/.*"
+      },
+      {
+        "pattern": "META-INF/services/java.sql.Driver"
+      },
+      {
+        "pattern": "META-INF/services/org.jboss.logging.LoggerProvider"
+      },
+      {
+        "pattern": "application.properties"
+      },
+      {
+        "pattern": "org/hibernate/hibernate-mapping-3.0.dtd"
+      },
+      {
+        "pattern": "org/hibernate/.*\\.dtd"
+      },
+      {
+        "pattern": "org/hibernate/.*\\.xsd"
+      }
+    ]
+  }
+}

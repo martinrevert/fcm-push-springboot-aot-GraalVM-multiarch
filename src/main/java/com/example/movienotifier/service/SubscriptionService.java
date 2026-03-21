@@ -1,0 +1,46 @@
+package com.example.movienotifier.service;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Optional;
+
+@Service
+public class SubscriptionService {
+
+    private static final Logger logger = LoggerFactory.getLogger(SubscriptionService.class);
+
+    private final SubscriptionRepository subscriptionRepository;
+
+    @Autowired
+    public SubscriptionService(SubscriptionRepository subscriptionRepository) {
+        this.subscriptionRepository = subscriptionRepository;
+    }
+
+    public Subscription subscribe(String registrationToken) {
+        Optional<Subscription> existingSubscription = subscriptionRepository.findByRegistrationToken(registrationToken);
+        if (existingSubscription.isPresent()) {
+            logger.info("Registration token already exists: {}", registrationToken);
+            return existingSubscription.get();
+        } else {
+            Subscription newSubscription = new Subscription(registrationToken);
+            subscriptionRepository.save(newSubscription);
+            logger.info("New subscription added: {}", newSubscription);
+            return newSubscription;
+        }
+    }
+
+    public void unsubscribe(String registrationToken) {
+        subscriptionRepository.findByRegistrationToken(registrationToken).ifPresent(subscription -> {
+            subscriptionRepository.delete(subscription);
+            logger.info("Subscription removed: {}", registrationToken);
+        });
+    }
+
+    public List<Subscription> getAllSubscriptions() {
+        return subscriptionRepository.findAll();
+    }
+}
