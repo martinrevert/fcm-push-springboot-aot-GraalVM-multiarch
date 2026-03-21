@@ -6,43 +6,47 @@ BINARY_NAME="movie-notifier-native"
 BINARY_PATH="$OUTPUT_DIR/$BINARY_NAME"
 ARM64_GRAALVM_IMAGE="ghcr.io/graalvm/native-image-community:25"
 
+copy_runtime_artifacts() {
+    if [ -f "serviceAccountKey.json" ]; then
+        cp serviceAccountKey.json "$OUTPUT_DIR/"
+        echo "Copied serviceAccountKey.json."
+    fi
+    if [ -f "src/main/resources/application.properties" ]; then
+        cp src/main/resources/application.properties "$OUTPUT_DIR/"
+        echo "Copied application.properties to $OUTPUT_DIR/."
+    fi
+}
+
 # Function to check for Docker
 check_docker() {
     if ! command -v docker &> /dev/null; then
-        echo "Docker not found. Installing Docker..."
-        # Try updating, but don't fail if some repos are unreachable
-        sudo apt-get update || echo "Warning: apt-get update had errors, proceeding..."
-        sudo apt-get install -y docker.io docker-buildx || { echo "Failed to install Docker via apt-get."; exit 1; }
-        sudo systemctl start docker || echo "Warning: Could not start Docker service via systemctl."
-        sudo systemctl enable docker || echo "Warning: Could not enable Docker service."
-
-        # Add current user to docker group (requires re-login or newgrp usually)
-        if ! getent group docker > /dev/null; then
-            sudo groupadd docker
-        fi
-        sudo usermod -aG docker $USER || echo "Warning: Could not add user to docker group."
-        echo "Docker installed. Please re-login for group changes to take effect, or run this script with sudo."
-    else
-        echo "Docker is already installed."
+        echo "Error: Docker is not installed or not in PATH."
+        echo "Install Docker + Buildx first, then run this script again."
+        exit 1
     fi
+
+    if ! docker info &> /dev/null; then
+        echo "Error: Docker daemon is not accessible by user '$USER'."
+        echo "Run one-time host setup (outside this script), then re-login:"
+        echo "  sudo usermod -aG docker $USER"
+        echo "  sudo systemctl enable --now docker"
+        echo "  newgrp docker"
+        exit 1
+    fi
+
+    if ! docker buildx version &> /dev/null; then
+        echo "Error: Docker Buildx is not available."
+        echo "Install Docker Buildx plugin and retry."
+        exit 1
+    fi
+
+    echo "Docker and Buildx are available."
 }
 
 # Function for ARM64 build via Docker
 build_arm64() {
     echo "Starting ARM64 build using Docker..."
     rm -f "$BINARY_PATH"
-
-    # Ensure buildx is available
-    if ! docker buildx version &> /dev/null; then
-        echo "Installing/Enabling Docker Buildx..."
-        # Check if buildx plugin is installed
-        if [ ! -f ~/.docker/cli-plugins/docker-buildx ]; then
-             mkdir -p ~/.docker/cli-plugins
-             # Try to download specific version or use apt if available
-             # Simply rely on 'docker buildx' command from docker-buildx package installed earlier
-             echo "Assuming docker-buildx package installed correctly."
-        fi
-    fi
 
     # Enable QEMU for multi-arch
     echo "Enabling QEMU for multi-arch builds..."
@@ -95,14 +99,7 @@ EOF
     echo "ARM64 Build SUCCESSFUL!"
     echo "Native binary exported to: $BINARY_PATH"
 
-    if [ -f "serviceAccountKey.json" ]; then
-        cp serviceAccountKey.json "$OUTPUT_DIR/"
-        echo "Copied serviceAccountKey.json."
-    fi
-    if [ -f "src/main/resources/application.properties" ]; then
-        cp src/main/resources/application.properties "$OUTPUT_DIR/"
-        echo "Copied application.properties to $OUTPUT_DIR/."
-    fi
+    copy_runtime_artifacts
 }
 
 # Main logic
@@ -123,15 +120,7 @@ else
 
     if [ ! -d "$GRAALVM_HOME_AMD64" ]; then
          echo "Error: GraalVM '$GRAALVM_HOME_AMD64' not found."
-         # Fallback to Docker for AMD64 if local GraalVM missing?
-         echo "Attempting to fallback to Docker for AMD64 build..."
-         check_docker
-         # Use standard docker build for current arch
-         docker build -t movie-notifier-native .
-         # Extract binary... complex without buildx --output local
-         # Use buildx for amd64 too for consistency
-         docker buildx build --platform linux/amd64 -f Dockerfile.native -t movie-notifier-native:amd64 --output type=local,dest=build/native/nativeCompile .
-         exit 0
+         exit 1
     fi
 
     echo "Building locally for AMD64..."
@@ -143,24 +132,12 @@ else
     # Clean first!
     ./gradlew clean nativeCompile
 
-    if [ $? -eq 0 ]; then
-        if [ ! -f "$BINARY_PATH" ]; then
-            echo "AMD64 build reported success but binary was not found at '$BINARY_PATH'."
-            exit 1
-        fi
-
-        chmod +x "$BINARY_PATH"
-        echo "AMD64 Build SUCCESSFUL!"
-        if [ -f "serviceAccountKey.json" ]; then
-            cp serviceAccountKey.json "$OUTPUT_DIR/"
-            echo "Copied serviceAccountKey.json."
-        fi
-        if [ -f "src/main/resources/application.properties" ]; then
-            cp src/main/resources/application.properties "$OUTPUT_DIR/"
-            echo "Copied application.properties to $OUTPUT_DIR/."
-        fi
-    else
-        echo "Build FAILED."
+    if [ ! -f "$BINARY_PATH" ]; then
+        echo "AMD64 build reported success but binary was not found at '$BINARY_PATH'."
         exit 1
     fi
+
+    chmod +x "$BINARY_PATH"
+    echo "AMD64 Build SUCCESSFUL!"
+    copy_runtime_artifacts
 fi

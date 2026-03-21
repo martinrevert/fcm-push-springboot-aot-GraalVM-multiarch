@@ -48,14 +48,14 @@ This matrix is an evidence-backed snapshot from project files and recent local b
 If you previously built with `sudo`, fix Gradle cache ownership first:
 
 ```bash
-cd /home/tincho/VS_STUDIO_PROJECTS/FCM_La_Torrentola/movie-notifier
+cd /path/to/movie-notifier
 sudo chown -R "$USER":"$USER" .gradle
 ```
 
 Verify wrapper + JVM toolchain:
 
 ```bash
-cd /home/tincho/VS_STUDIO_PROJECTS/FCM_La_Torrentola/movie-notifier
+cd /path/to/movie-notifier
 ./gradlew --version
 ./gradlew clean test
 ```
@@ -63,14 +63,14 @@ cd /home/tincho/VS_STUDIO_PROJECTS/FCM_La_Torrentola/movie-notifier
 JVM run:
 
 ```bash
-cd /home/tincho/VS_STUDIO_PROJECTS/FCM_La_Torrentola/movie-notifier
+cd /path/to/movie-notifier
 ./gradlew bootRun
 ```
 
 AMD64 native build and run:
 
 ```bash
-cd /home/tincho/VS_STUDIO_PROJECTS/FCM_La_Torrentola/movie-notifier
+cd /path/to/movie-notifier
 ./build-native.sh
 cd build/native/nativeCompile
 ./movie-notifier-native
@@ -79,7 +79,7 @@ cd build/native/nativeCompile
 ARM64 cross-build (Docker Buildx + QEMU) and architecture check:
 
 ```bash
-cd /home/tincho/VS_STUDIO_PROJECTS/FCM_La_Torrentola/movie-notifier
+cd /path/to/movie-notifier
 sudo ./build-native.sh aarch64
 file build/native/nativeCompile/movie-notifier-native
 ```
@@ -93,6 +93,44 @@ Use `## Quick Verify (Java 25 only)` as the primary copy/paste flow.
 - Native output directory is `build/native/nativeCompile`.
 - Native binary path is `build/native/nativeCompile/movie-notifier-native`.
 - Copied runtime files are `build/native/nativeCompile/application.properties` and `build/native/nativeCompile/serviceAccountKey.json` (if present).
+
+## Subscription REST API
+
+Base path: `/api/subscriptions`
+
+### Subscribe
+
+- Endpoint: `POST /api/subscriptions/subscribe`
+- Input: required query parameter `token`
+- Returns: `200 OK` with `Subscription` JSON
+
+```bash
+curl -X POST "http://localhost:8080/api/subscriptions/subscribe?token=<FCM_REGISTRATION_TOKEN>"
+```
+
+Example response (`200 OK`):
+
+```json
+{
+  "id": 1,
+  "registrationToken": "<FCM_REGISTRATION_TOKEN>",
+  "subscribedAt": "2026-03-21T10:15:30.123456"
+}
+```
+
+### Unsubscribe
+
+- Endpoint: `POST /api/subscriptions/unsubscribe`
+- Input: required query parameter `token`
+- Returns: `204 No Content`
+
+```bash
+curl -X POST "http://localhost:8080/api/subscriptions/unsubscribe?token=<FCM_REGISTRATION_TOKEN>" -i
+```
+
+Validation note:
+
+- Missing `token`: `400 Bad Request`
 
 ## Configuration
 
