@@ -4,6 +4,7 @@ set -e
 OUTPUT_DIR="build/native/nativeCompile"
 BINARY_NAME="movie-notifier-native"
 BINARY_PATH="$OUTPUT_DIR/$BINARY_NAME"
+ARM64_GRAALVM_IMAGE="ghcr.io/graalvm/native-image-community:25"
 
 # Function to check for Docker
 check_docker() {
@@ -62,14 +63,18 @@ build_arm64() {
 
     # Create Dockerfile
     cat <<EOF > Dockerfile.native
-FROM ghcr.io/graalvm/native-image-community:21 AS builder
+FROM $ARM64_GRAALVM_IMAGE AS builder
 WORKDIR /app
 COPY . .
 # Install dependencies for gradlew (findutils provides xargs)
 RUN microdnf install -y findutils bash
 RUN chmod +x gradlew
 # Run native build (CLEAN first to avoid stale AOT classes)
-RUN ./gradlew clean nativeCompile --no-daemon
+# Force Gradle to use the container's Java install instead of host-specific paths.
+RUN export JAVA_HOME="\$(dirname "\$(dirname "\$(readlink -f "\$(command -v java)")")")" && \
+    ./gradlew clean nativeCompile --no-daemon \
+      -Dorg.gradle.java.installations.paths="\$JAVA_HOME" \
+      -Dorg.gradle.java.installations.auto-download=false
 
 # Export binary
 FROM scratch
@@ -106,13 +111,13 @@ if [ "$1" == "aarch64" ] || [ "$1" == "arm64" ]; then
     build_arm64
 else
     # AMD64 Local Build Logic
-    JAVA_HOME_PATH="/usr/lib/jvm/java-21-openjdk-amd64"
+    JAVA_HOME_PATH="/opt/graalvm-amd64"
     GRAALVM_HOME_AMD64="/opt/graalvm-amd64"
 
     # Verify local tools
     if [ ! -d "$JAVA_HOME_PATH" ]; then
         echo "Error: JAVA_HOME '$JAVA_HOME_PATH' not found."
-        echo "Please install Java 21 or update script path."
+        echo "Please install GraalVM Java 25 or update script path."
         exit 1
     fi
 

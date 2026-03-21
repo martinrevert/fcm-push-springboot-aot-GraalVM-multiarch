@@ -20,8 +20,8 @@ Spring Boot service that polls YTS and sends Firebase push notifications for new
 ## Prerequisites
 
 - Linux (script is Bash-based).
-- Java 21 installed at `/usr/lib/jvm/java-21-openjdk-amd64` (or adapt `build-native.sh`).
-- GraalVM installed at `/opt/graalvm-amd64` for local AMD64 native builds (or adapt `build-native.sh`).
+- Java 25 only.
+- GraalVM Java 25 installed at `/opt/graalvm-amd64` for local AMD64 native builds (or adapt `build-native.sh`).
 - Docker + Buildx for AARCH64 cross-builds.
 - Firebase key file: `serviceAccountKey.json` in project root.
 
@@ -33,53 +33,66 @@ This matrix is an evidence-backed snapshot from project files and recent local b
 |---|---|---|
 | Spring Boot plugin | `4.0.4` | `build.gradle` |
 | GraalVM Native Build Tools plugin | `0.11.1` | `build.gradle` |
-| Java source/target toolchain | `21` | `build.gradle` |
+| Java source/target/toolchain | `25` | `build.gradle` |
 | Native Graal launcher constraint | GraalVM Java `25` | `build.gradle` |
-| Gradle wrapper | `8.14.3` | `gradle/wrapper/gradle-wrapper.properties` |
+| Gradle wrapper | `9.1.0` | `gradle/wrapper/gradle-wrapper.properties` |
 | Foojay resolver plugin | `0.9.0` | `settings.gradle` |
 | Local AMD64 GraalVM path expected by script | `/opt/graalvm-amd64` | `build-native.sh` |
-| Local Java path expected by script | `/usr/lib/jvm/java-21-openjdk-amd64` | `build-native.sh` |
-| ARM64 Docker image used by script | `ghcr.io/graalvm/native-image-community:21` | `build-native.sh` |
+| Local Java path expected by script | `/opt/graalvm-amd64` | `build-native.sh` |
+| ARM64 Docker image used by script | `ghcr.io/graalvm/native-image-community:25` | `build-native.sh` |
 | Tomcat at native runtime (observed) | `11.0.18` | recent native run logs |
 | Hibernate ORM at native runtime (observed) | `7.2.7.Final` | recent native run logs |
 
-## Run on JVM
+## Quick Verify (Java 25 only)
 
-Use Spring Boot task `bootRun` (not `runBoot`).
+If you previously built with `sudo`, fix Gradle cache ownership first:
+
+```bash
+cd /home/tincho/VS_STUDIO_PROJECTS/FCM_La_Torrentola/movie-notifier
+sudo chown -R "$USER":"$USER" .gradle
+```
+
+Verify wrapper + JVM toolchain:
+
+```bash
+cd /home/tincho/VS_STUDIO_PROJECTS/FCM_La_Torrentola/movie-notifier
+./gradlew --version
+./gradlew clean test
+```
+
+JVM run:
 
 ```bash
 cd /home/tincho/VS_STUDIO_PROJECTS/FCM_La_Torrentola/movie-notifier
 ./gradlew bootRun
 ```
 
-## Build Native (Recommended: Script)
-
-### AMD64 local build
+AMD64 native build and run:
 
 ```bash
 cd /home/tincho/VS_STUDIO_PROJECTS/FCM_La_Torrentola/movie-notifier
 ./build-native.sh
+cd build/native/nativeCompile
+./movie-notifier-native
 ```
 
-### AARCH64 cross-build (Docker)
+ARM64 cross-build (Docker Buildx + QEMU) and architecture check:
 
 ```bash
 cd /home/tincho/VS_STUDIO_PROJECTS/FCM_La_Torrentola/movie-notifier
-./build-native.sh aarch64
+sudo ./build-native.sh aarch64
+file build/native/nativeCompile/movie-notifier-native
 ```
 
-Both flows place artifacts in:
+## Run and Build Reference
 
-- Binary: `build/native/nativeCompile/movie-notifier-native`
-- Copied config: `build/native/nativeCompile/application.properties`
-- Copied Firebase key (if present): `build/native/nativeCompile/serviceAccountKey.json`
+Use `## Quick Verify (Java 25 only)` as the primary copy/paste flow.
 
-## Run Native Binary
-
-```bash
-cd /home/tincho/VS_STUDIO_PROJECTS/FCM_La_Torrentola/movie-notifier/build/native/nativeCompile
-./movie-notifier-native
-```
+- JVM task name is `bootRun` (not `runBoot`).
+- Native build script is `./build-native.sh` (AMD64 local) or `./build-native.sh aarch64` (ARM64 cross-build).
+- Native output directory is `build/native/nativeCompile`.
+- Native binary path is `build/native/nativeCompile/movie-notifier-native`.
+- Copied runtime files are `build/native/nativeCompile/application.properties` and `build/native/nativeCompile/serviceAccountKey.json` (if present).
 
 ## Configuration
 
@@ -102,8 +115,10 @@ Current app expects:
 
 - Spring Boot `4.0.4`
 - Graal plugin `0.11.1`
-- Java toolchain source/target 21
+- Java toolchain source/target 25
 - Native launcher lookup for GraalVM Java 25
+
+Java 21 is not supported by this repository configuration anymore.
 
 If native compile fails with toolchain lookup errors, use `./build-native.sh` and verify GraalVM path in the script.
 
