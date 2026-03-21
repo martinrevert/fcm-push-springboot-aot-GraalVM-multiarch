@@ -59,7 +59,7 @@ graalvmNative {
             buildArgs.addAll([
                 '--no-fallback',
                 '--enable-url-protocols=http,https',
-                '--initialize-at-build-time=org.slf4j,ch.qos.logback'
+                '--initialize-at-build-time=org.slf4j,ch.qos.logback,org.hibernate.internal.HEMLogging'
             ])
         }
     }

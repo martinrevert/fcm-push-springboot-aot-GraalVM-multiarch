@@ -1,181 +1,139 @@
-# Movie Notifier Application
+# Movie Notifier
 
-This is a Spring Boot application designed to notify users about new movie releases. It periodically polls a movie database API (YTS.ag) and sends push notifications via Firebase Cloud Messaging (FCM) for any newly detected movies.
+Spring Boot service that polls YTS and sends Firebase push notifications for new movies.
 
-## Features
+## What It Does
 
-*   **Scheduled Polling**: Automatically checks for new movie releases at regular intervals.
-*   **Duplicate Prevention**: Keeps track of already notified movies to avoid sending redundant alerts.
-*   **Firebase Cloud Messaging (FCM)**: Leverages FCM to deliver push notifications to subscribed clients.
-*   **Native Image Support**: Optimized for GraalVM Native Image compilation, providing faster startup times and reduced memory consumption.
-*   **Configurable Firebase**: Uses a `serviceAccountKey.json` file for secure Firebase integration.
+- Polls movie data on a schedule.
+- Avoids duplicate notifications.
+- Sends push notifications through Firebase Admin SDK.
+- Supports JVM run and GraalVM native executable builds.
 
-## Architecture
+## Project Layout
 
-The application follows a microservice-like architecture, with distinct services handling specific responsibilities.
+- App entrypoint: `src/main/java/com/example/movienotifier/MovieNotifierApplication.java`
+- Data source config: `src/main/java/com/example/movienotifier/config/DataSourceConfig.java`
+- Main config: `src/main/resources/application.properties`
+- Native reflection config: `src/main/resources/META-INF/native-image/com.example/movie-notifier/reflect-config.json`
+- Native build script: `build-native.sh`
 
-```
-+-------------------+       +-------------------+       +-------------------+
-| MoviePollingService | <---> | RestTemplate      | <---> | YTS.ag API        |
-+-------------------+       +-------------------+       +-------------------+
-         |                                                       ^
-         | (New Movie Detected)                                  |
-         v                                                       |
-+-------------------+       +-------------------+       +-------------------+
-| NotificationService | <---> | FirebaseMessaging | <---> | FCM (Firebase)    |
-+-------------------+       +-------------------+       +-------------------+
-         ^                                                       |
-         |                                                       |
-         | (FirebaseConfig init)                                 |
-+-------------------+                                            |
-| FirebaseConfig    |                                            |
-+-------------------+                                            |
-         ^                                                       |
-         |                                                       |
-         | (Spring Boot App)                                     |
-+----------------------------------------------------------------+
-| MovieNotifierApplication (Spring Boot Context)                 |
-+----------------------------------------------------------------+
-```
+## Prerequisites
 
-*   **MovieNotifierApplication**: The main Spring Boot entry point, setting up the application context.
-*   **FirebaseConfig**: Initializes the Firebase Admin SDK using a service account key.
-*   **MoviePollingService**: Contains the scheduled logic to fetch movie data from the YTS.ag API.
-*   **NotificationService**: Handles sending messages via Firebase Cloud Messaging.
+- Linux (script is Bash-based).
+- Java 21 installed at `/usr/lib/jvm/java-21-openjdk-amd64` (or adapt `build-native.sh`).
+- GraalVM installed at `/opt/graalvm-amd64` for local AMD64 native builds (or adapt `build-native.sh`).
+- Docker + Buildx for AARCH64 cross-builds.
+- Firebase key file: `serviceAccountKey.json` in project root.
 
-## Sequence Flows
+## Known Good Build Matrix
 
-### Movie Polling Flow
+This matrix is an evidence-backed snapshot from project files and recent local build logs, not a universal compatibility guarantee.
 
-This diagram illustrates how the application polls for new movies and triggers notifications.
+| Component | Version / Value | Source |
+|---|---|---|
+| Spring Boot plugin | `4.0.4` | `build.gradle` |
+| GraalVM Native Build Tools plugin | `0.11.1` | `build.gradle` |
+| Java source/target toolchain | `21` | `build.gradle` |
+| Native Graal launcher constraint | GraalVM Java `25` | `build.gradle` |
+| Gradle wrapper | `8.14.3` | `gradle/wrapper/gradle-wrapper.properties` |
+| Foojay resolver plugin | `0.9.0` | `settings.gradle` |
+| Local AMD64 GraalVM path expected by script | `/opt/graalvm-amd64` | `build-native.sh` |
+| Local Java path expected by script | `/usr/lib/jvm/java-21-openjdk-amd64` | `build-native.sh` |
+| ARM64 Docker image used by script | `ghcr.io/graalvm/native-image-community:21` | `build-native.sh` |
+| Tomcat at native runtime (observed) | `11.0.18` | recent native run logs |
+| Hibernate ORM at native runtime (observed) | `7.2.7.Final` | recent native run logs |
 
-```
-+-----------------------+     +-------------------+     +-------------------+
-| MoviePollingService   |     | RestTemplate      |     | YTS.ag API        |
-+-----------------------+     +-------------------+     +-------------------+
-           |                           |                           |
-           |  1. @Scheduled poll()     |                           |
-           |-------------------------->|                           |
-           |                           |  2. GET /list_movies.json |
-           |                           |-------------------------->|
-           |                           |                           |  3. Returns JSON
-           |                           |<--------------------------|
-           |  4. Process Response      |                           |
-           |  (Check for new movies)   |                           |
-           |                           |                           |
-           |  5. If new movie:         |                           |
-           |     Call NotificationService.sendMovieNotification()  |
-           |------------------------------------------------------>|
-```
+## Run on JVM
 
-### Notification Sending Flow
-
-This diagram shows how a notification is constructed and sent via FCM.
-
-```
-+-----------------------+     +-------------------+     +-------------------+
-| NotificationService   |     | FirebaseMessaging |     | FCM (Firebase)    |
-+-----------------------+     +-------------------+     +-------------------+
-           |                           |                           |
-           |  1. sendMovieNotification(title)                      |
-           |-------------------------->|                           |
-           |                           |  2. Build Message         |
-           |                           |  (with title)             |
-           |                           |-------------------------->|
-           |                           |                           |  3. Send Push Notification
-           |                           |<--------------------------|
-           |                           |                           |
-```
-
-## Getting Started
-
-### Prerequisites
-
-*   **Java Development Kit (JDK)**: Version 17 or 21 (for running Gradle locally).
-*   **Gradle**: The project uses the Gradle Wrapper, so a local Gradle installation is not strictly required.
-*   **Docker**: Required for cross-compilation to AARCH64 or if local GraalVM is not available.
-*   **Firebase Service Account Key**: A `serviceAccountKey.json` file from your Firebase project. Place this file in the `movie-notifier/` directory.
-
-### Building the Application
-
-Navigate to the `movie-notifier/` directory in your terminal.
-
-#### 1. Local AMD64 Build (Native Image)
-
-This builds a native executable for your current AMD64 (x86_64) system.
+Use Spring Boot task `bootRun` (not `runBoot`).
 
 ```bash
-# Ensure your JAVA_HOME points to a stable JDK (e.g., OpenJDK 21)
-# Ensure GRAALVM_HOME points to your GraalVM installation (e.g., /opt/graalvm-amd64)
-# The build-native.sh script handles these environment variables.
+cd /home/tincho/VS_STUDIO_PROJECTS/FCM_La_Torrentola/movie-notifier
+./gradlew bootRun
+```
+
+## Build Native (Recommended: Script)
+
+### AMD64 local build
+
+```bash
+cd /home/tincho/VS_STUDIO_PROJECTS/FCM_La_Torrentola/movie-notifier
 ./build-native.sh
 ```
 
-The executable will be generated in `build/native/nativeCompile/movie-notifier-native`.
-
-#### 2. AARCH64 (ARM) Build using Docker Buildx
-
-This builds a native executable for ARM64 architecture using Docker's multi-architecture capabilities.
+### AARCH64 cross-build (Docker)
 
 ```bash
+cd /home/tincho/VS_STUDIO_PROJECTS/FCM_La_Torrentola/movie-notifier
 ./build-native.sh aarch64
 ```
 
-The executable will be generated in `build/native/nativeCompile/movie-notifier-native`.
+Both flows place artifacts in:
 
-### Running the Application
+- Binary: `build/native/nativeCompile/movie-notifier-native`
+- Copied config: `build/native/nativeCompile/application.properties`
+- Copied Firebase key (if present): `build/native/nativeCompile/serviceAccountKey.json`
 
-After a successful build, navigate to the output directory and run the executable:
+## Run Native Binary
 
 ```bash
-cd build/native/nativeCompile
+cd /home/tincho/VS_STUDIO_PROJECTS/FCM_La_Torrentola/movie-notifier/build/native/nativeCompile
 ./movie-notifier-native
 ```
 
-The application will start, initialize Firebase, and begin polling for movies.
+## Configuration
 
-## Cross-Compilation for AARCH64 (ARM)
+Main runtime config is in `src/main/resources/application.properties`.
 
-The `build-native.sh` script is configured to build a native executable for AARCH64 (ARM) architecture using Docker Buildx. This allows you to build ARM binaries even if your host machine is AMD64.
+Current app expects:
 
-### Prerequisites for Host Machine
+- `spring.datasource.url`
+- `spring.datasource.username`
+- `spring.datasource.password`
+- `firebase.service-account-file=serviceAccountKey.json`
 
-To make the AARCH64 cross-compilation work, your host machine (e.g., your AMD64 Ubuntu desktop) needs the following:
+`DataSourceConfig` builds Hikari using `org.mariadb.jdbc.MariaDbDataSource` and passes URL/user/password as datasource properties.
 
-1.  **Docker Installed and Running**:
-    *   Install: `sudo apt-get update && sudo apt-get install -y docker.io docker-buildx`
-    *   Start: `sudo systemctl start docker`
-    *   Enable: `sudo systemctl enable docker`
-    *   **User Permissions**: To run Docker commands without `sudo`, add your user to the `docker` group: `sudo usermod -aG docker $USER`. You will need to **log out and log back in** for this change to take effect. If you don't do this, you'll need to prefix Docker commands (or the script) with `sudo`.
+## Native Notes
 
-2.  **Docker Buildx Plugin**: This is usually installed with the `docker-buildx` package. It's crucial for multi-architecture builds.
+### Toolchain behavior
 
-3.  **QEMU binfmt support**: Docker Buildx uses QEMU to emulate ARM architecture. The `build-native.sh` script attempts to enable this automatically by running `docker run --privileged --rm tonistiigi/binfmt --install all`. This requires Docker to be running and your host kernel to support `binfmt_misc`.
+`build.gradle` uses:
 
-4.  **Internet Connection**: Required to pull Docker images (e.g., `ghcr.io/graalvm/native-image-community:21`, `tonistiigi/binfmt`) which provide the ARM build environment.
+- Spring Boot `4.0.4`
+- Graal plugin `0.11.1`
+- Java toolchain source/target 21
+- Native launcher lookup for GraalVM Java 25
 
-5.  **`serviceAccountKey.json`**: Your Firebase service account key file must be placed in the project root (`movie-notifier/`) for the application to run. The script will copy it to the build output directory.
+If native compile fails with toolchain lookup errors, use `./build-native.sh` and verify GraalVM path in the script.
 
-### How it Works
+### Reflection metadata
 
-When you run `./build-native.sh aarch64`:
+Hibernate 7 on native may require explicit reflection entries. This project keeps them in:
 
-*   The script checks for Docker and sets up Buildx.
-*   It generates a `Dockerfile.native` on the fly.
-*   This Dockerfile uses a `ghcr.io/graalvm/native-image-community:21` image (which is a GraalVM distribution for ARM64).
-*   Docker Buildx then builds this image, running the `gradlew nativeCompile` command *inside an emulated ARM64 environment*.
-*   Finally, the resulting ARM64 native executable is copied back to your host machine's `build/native/nativeCompile/` directory.
+- `src/main/resources/META-INF/native-image/com.example/movie-notifier/reflect-config.json`
 
-### Usage
+Recent required entries include:
 
-To build the AARCH64 native executable:
+- `org.hibernate.event.spi.PreFlushEventListener[]`
+- `org.hibernate.event.spi.PostFlushEventListener[]`
 
-```bash
-./build-native.sh aarch64
-```
+If you get `MissingReflectionRegistrationError` for another type, add that exact type in `reflect-config.json`, rebuild, and rerun.
 
-### Important Notes
+## Troubleshooting
 
-*   **Performance**: Building ARM64 binaries on an AMD64 host via QEMU emulation can be significantly slower than building natively on an ARM64 machine.
-*   **Running ARM64 Executables**: The generated `movie-notifier-native` executable for AARCH64 can only be run on an actual ARM64 machine or on an AMD64 machine with QEMU user emulation properly configured (which Docker handles for the build process, but you'd need to set up for running the executable directly).
-*   **`serviceAccountKey.json`**: Remember to place your `serviceAccountKey.json` in the `movie-notifier/` directory before building, so it can be copied alongside the executable.
+- `Task 'runBoot' not found`:
+  - Use `./gradlew bootRun`.
+- `./movie-notifier-native: No such file or directory`:
+  - Build did not finish successfully. Re-run `./build-native.sh` and verify binary exists in `build/native/nativeCompile`.
+- Native app starts but DB auth fails:
+  - Check values in `application.properties` and that runtime config file is copied into native output directory.
+- Native build fails with SLF4J image heap/provider errors:
+  - Re-check native build args in `build.gradle` and use the project defaults.
+
+## Security Reminder
+
+Do not commit real production secrets.
+
+- `serviceAccountKey.json` should stay private.
+- Consider moving DB credentials to environment variables or external config for production.

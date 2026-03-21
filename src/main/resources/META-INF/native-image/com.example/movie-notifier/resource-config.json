@@ -8,9 +8,6 @@
         "pattern": "META-INF/services/java.sql.Driver"
       },
       {
-        "pattern": "META-INF/services/org.jboss.logging.LoggerProvider"
-      },
-      {
         "pattern": "application.properties"
       },
       {
