@@ -3,6 +3,7 @@ package com.example.movienotifier.service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -28,9 +29,19 @@ public class SubscriptionService {
             return existingSubscription.get();
         } else {
             Subscription newSubscription = new Subscription(normalizedToken);
-            subscriptionRepository.save(newSubscription);
-            logger.info("New subscription added: {}", newSubscription);
-            return newSubscription;
+            try {
+                Subscription savedSubscription = subscriptionRepository.save(newSubscription);
+                logger.info("New subscription added: {}", savedSubscription);
+                return savedSubscription;
+            } catch (DataIntegrityViolationException e) {
+                // Another request inserted the same token first. Treat as idempotent success.
+                return subscriptionRepository.findByRegistrationToken(normalizedToken)
+                    .map(subscription -> {
+                        logger.info("Registration token already existed after concurrent insert: {}", normalizedToken);
+                        return subscription;
+                    })
+                    .orElseThrow(() -> e);
+            }
         }
     }
 
