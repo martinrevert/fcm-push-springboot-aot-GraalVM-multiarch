@@ -36,21 +36,46 @@ public class NotificationService {
         logger.info("Sending notification for movie '{}' to {} subscribers.", title, subscriptions.size());
 
         for (Subscription subscription : subscriptions) {
+            String token = validateToken(subscription.getRegistrationToken());
+            if (token == null) {
+                logger.warn("Skipping subscription id={} due to blank registration token.", subscription.getId());
+                continue;
+            }
+
+            logger.debug("Preparing FCM message for subscription id={} token={}",
+                    subscription.getId(), shortenToken(token));
+
             Message message = Message.builder()
                     .putData("title", title)
-                    .setToken(subscription.getRegistrationToken())
+                    .setToken(token)
                     .build();
+
             try {
                 String response = firebaseMessaging.send(message);
-                logger.info("Successfully sent message to token {}: {}", subscription.getRegistrationToken(), response);
+                logger.info("Successfully sent message to token {}: {}", shortenToken(token), response);
             } catch (FirebaseMessagingException e) {
-                logger.error("Failed to send message to token {}: {}", subscription.getRegistrationToken(), e.getMessage());
+                logger.error("Failed to send message to token {}: {}", shortenToken(token), e.getMessage());
                 if (shouldDeleteSubscription(e)) {
-                    subscriptionService.unsubscribe(subscription.getRegistrationToken());
-                    logger.warn("Removed invalid subscription token after FCM rejection: {}", subscription.getRegistrationToken());
+                    subscriptionService.unsubscribe(token);
+                    logger.warn("Removed invalid subscription token after FCM rejection: {}", shortenToken(token));
                 }
             }
         }
+    }
+
+    private String validateToken(String token) {
+        if (token == null) {
+            return null;
+        }
+        // Keep token unchanged to preserve exact bytes received from the client.
+        return token.isBlank() ? null : token;
+    }
+
+    private String shortenToken(String token) {
+        if (token.length() <= 12) {
+            return token;
+        }
+        return token.substring(0, 8) + "..." + token.substring(token.length() - 4);
     }
 
     private boolean shouldDeleteSubscription(FirebaseMessagingException exception) {

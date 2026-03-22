@@ -21,12 +21,13 @@ public class SubscriptionService {
     }
 
     public Subscription subscribe(String registrationToken) {
-        Optional<Subscription> existingSubscription = subscriptionRepository.findByRegistrationToken(registrationToken);
+        String normalizedToken = normalizeToken(registrationToken);
+        Optional<Subscription> existingSubscription = subscriptionRepository.findByRegistrationToken(normalizedToken);
         if (existingSubscription.isPresent()) {
-            logger.info("Registration token already exists: {}", registrationToken);
+            logger.info("Registration token already exists: {}", normalizedToken);
             return existingSubscription.get();
         } else {
-            Subscription newSubscription = new Subscription(registrationToken);
+            Subscription newSubscription = new Subscription(normalizedToken);
             subscriptionRepository.save(newSubscription);
             logger.info("New subscription added: {}", newSubscription);
             return newSubscription;
@@ -34,13 +35,22 @@ public class SubscriptionService {
     }
 
     public void unsubscribe(String registrationToken) {
-        subscriptionRepository.findByRegistrationToken(registrationToken).ifPresent(subscription -> {
+        String normalizedToken = normalizeToken(registrationToken);
+        subscriptionRepository.findByRegistrationToken(normalizedToken).ifPresent(subscription -> {
             subscriptionRepository.delete(subscription);
-            logger.info("Subscription removed: {}", registrationToken);
+            logger.info("Subscription removed: {}", normalizedToken);
         });
     }
 
     public List<Subscription> getAllSubscriptions() {
         return subscriptionRepository.findAll();
+    }
+
+    private String normalizeToken(String registrationToken) {
+        if (registrationToken == null || registrationToken.isBlank()) {
+            throw new IllegalArgumentException("FCM registration token must not be null or blank");
+        }
+        // Keep token unchanged to preserve exact bytes received from the client.
+        return registrationToken;
     }
 }
