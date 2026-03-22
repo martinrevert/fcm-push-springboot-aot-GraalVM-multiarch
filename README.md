@@ -5,7 +5,7 @@ Spring Boot service that polls YTS and sends Firebase push notifications for new
 ## What It Does
 
 - Polls movie data on a schedule.
-- Avoids duplicate notifications.
+- Avoids duplicate notifications using persisted `notified_movies` records.
 - Sends push notifications through Firebase Admin SDK.
 - Supports JVM run and GraalVM native executable builds.
 
@@ -25,7 +25,7 @@ flowchart LR
     API["SubscriptionController<br/>/api/subscriptions"]
     SubSvc["SubscriptionService"]
     Repo[("SubscriptionRepository<br/>MariaDB")]
-    Poll["MoviePollingService<br/>Scheduled every 60s"]
+    Poll["MoviePollingService<br/>Scheduled via movie.polling.fixed-rate-ms"]
     YTS["YTS API<br/>list_movies.json"]
     Notif["NotificationService"]
     FCM["Firebase Cloud Messaging"]
@@ -128,13 +128,13 @@ sequenceDiagram
     participant Repo as SubscriptionRepository
     participant FCM as FirebaseMessaging
 
-    Scheduler->>Poll: pollMovies() every 60s
+    Scheduler->>Poll: pollMovies() using configured fixed rate
     Poll->>YTS: GET /api/v2/list_movies.json
     YTS-->>Poll: MovieResponse
     alt Response has movies
         loop each movie in response
-            alt movie ID not seen before
-                Poll->>Poll: add ID to seenMovieIds
+            alt movie ID not present in notified_movies
+                Poll->>DB: saveAndFlush(NotifiedMovie)
                 Poll->>Notif: sendMovieNotification(title)
                 Notif->>SubSvc: getAllSubscriptions()
                 SubSvc->>Repo: findAll()
@@ -144,7 +144,7 @@ sequenceDiagram
                     Notif->>FCM: send(Message{title, token})
                     FCM-->>Notif: message id or error
                 end
-            else already seen
+            else already present in notified_movies
                 Poll->>Poll: skip
             end
         end
@@ -278,8 +278,11 @@ Current app expects:
 - `spring.datasource.username`
 - `spring.datasource.password`
 - `firebase.service-account-file=serviceAccountKey.json`
+- `movie.polling.fixed-rate-ms=60000` (default: 60s)
 
 `DataSourceConfig` builds Hikari using `org.mariadb.jdbc.MariaDbDataSource` and passes URL/user/password as datasource properties.
+
+Polling dedupe is DB-backed: `MoviePollingService` checks/persists in `notified_movies` before sending, so restarts do not resend already-notified movies.
 
 ## Native Notes
 
