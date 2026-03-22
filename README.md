@@ -21,15 +21,15 @@ Spring Boot service that polls YTS and sends Firebase push notifications for new
 
 ```mermaid
 flowchart LR
-    Client[Client App]
-    API[SubscriptionController\n/api/subscriptions]
-    SubSvc[SubscriptionService]
-    Repo[(SubscriptionRepository\nMariaDB)]
-    Poll[MoviePollingService\n@Scheduled every 60s]
-    YTS[YTS API\nlist_movies.json]
-    Notif[NotificationService]
-    FCM[Firebase Cloud Messaging]
-    Device[Subscriber Device]
+    Client["Client App"]
+    API["SubscriptionController<br/>/api/subscriptions"]
+    SubSvc["SubscriptionService"]
+    Repo[("SubscriptionRepository<br/>MariaDB")]
+    Poll["MoviePollingService<br/>Scheduled every 60s"]
+    YTS["YTS API<br/>list_movies.json"]
+    Notif["NotificationService"]
+    FCM["Firebase Cloud Messaging"]
+    Device["Subscriber Device"]
 
     Client -->|POST subscribe/unsubscribe| API
     API --> SubSvc
