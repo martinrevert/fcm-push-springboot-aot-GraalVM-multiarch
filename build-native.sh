@@ -130,7 +130,7 @@ else
     rm -f "$BINARY_PATH"
 
     # Clean first!
-    ./gradlew clean nativeCompile
+    ./gradlew clean nativeCompile --no-daemon
 
     if [ ! -f "$BINARY_PATH" ]; then
         echo "AMD64 build reported success but binary was not found at '$BINARY_PATH'."
