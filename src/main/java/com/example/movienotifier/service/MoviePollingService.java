@@ -28,7 +28,7 @@ public class MoviePollingService {
         this.notifiedMovieRepository = notifiedMovieRepository;
     }
 
-    @Scheduled(fixedRate = 60000) // every 60 seconds
+    @Scheduled(fixedRateString = "${movie.polling.fixed-rate-ms:60000}")
     public void pollMovies() {
         logger.info("Polling for new movies...");
         String url = "https://yts.ag/api/v2/list_movies.json";
