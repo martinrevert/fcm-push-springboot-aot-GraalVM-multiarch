@@ -17,6 +17,142 @@ Spring Boot service that polls YTS and sends Firebase push notifications for new
 - Native reflection config: `src/main/resources/META-INF/native-image/com.example/movie-notifier/reflect-config.json`
 - Native build script: `build-native.sh`
 
+## Architecture Diagram
+
+```mermaid
+flowchart LR
+    Client[Client App]
+    API[SubscriptionController\n/api/subscriptions]
+    SubSvc[SubscriptionService]
+    Repo[(SubscriptionRepository\nMariaDB)]
+    Poll[MoviePollingService\n@Scheduled every 60s]
+    YTS[YTS API\nlist_movies.json]
+    Notif[NotificationService]
+    FCM[Firebase Cloud Messaging]
+    Device[Subscriber Device]
+
+    Client -->|POST subscribe/unsubscribe| API
+    API --> SubSvc
+    SubSvc --> Repo
+
+    Poll -->|GET movies| YTS
+    Poll -->|new movie title| Notif
+    Notif --> SubSvc
+    SubSvc --> Repo
+    Notif -->|send message| FCM
+    FCM --> Device
+```
+
+## Service Flows (Sequence Diagrams)
+
+### Startup and Firebase Initialization
+
+```mermaid
+sequenceDiagram
+    participant App as Spring Boot App
+    participant FirebaseConfig
+    participant FS as serviceAccountKey.json
+    participant FApp as FirebaseApp
+
+    App->>FirebaseConfig: Create bean
+    FirebaseConfig->>FS: Read service account file
+    FirebaseConfig->>FApp: initializeApp(credentials)
+    FApp-->>FirebaseConfig: Firebase ready
+```
+
+### Subscribe Flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Controller as SubscriptionController
+    participant Service as SubscriptionService
+    participant Repo as SubscriptionRepository
+    participant DB as MariaDB
+
+    Client->>Controller: POST /api/subscriptions/subscribe?token=...
+    Controller->>Service: subscribe(token)
+    Service->>Repo: findByRegistrationToken(token)
+    Repo->>DB: SELECT by token
+    alt Token exists
+        DB-->>Repo: existing row
+        Repo-->>Service: Optional(existing)
+        Service-->>Controller: existing subscription
+    else New token
+        DB-->>Repo: empty
+        Repo-->>Service: Optional.empty
+        Service->>Repo: save(new Subscription(token))
+        Repo->>DB: INSERT
+        Repo-->>Service: saved subscription
+        Service-->>Controller: saved subscription
+    end
+    Controller-->>Client: 200 OK + Subscription JSON
+```
+
+### Unsubscribe Flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Controller as SubscriptionController
+    participant Service as SubscriptionService
+    participant Repo as SubscriptionRepository
+    participant DB as MariaDB
+
+    Client->>Controller: POST /api/subscriptions/unsubscribe?token=...
+    Controller->>Service: unsubscribe(token)
+    Service->>Repo: findByRegistrationToken(token)
+    Repo->>DB: SELECT by token
+    alt Token exists
+        DB-->>Repo: subscription row
+        Repo-->>Service: Optional(subscription)
+        Service->>Repo: delete(subscription)
+        Repo->>DB: DELETE
+    else Token not found
+        DB-->>Repo: empty
+        Repo-->>Service: Optional.empty
+    end
+    Service-->>Controller: done
+    Controller-->>Client: 204 No Content
+```
+
+### Scheduled Polling and Notification Flow
+
+```mermaid
+sequenceDiagram
+    participant Scheduler as Spring Scheduler
+    participant Poll as MoviePollingService
+    participant YTS as YTS API
+    participant Notif as NotificationService
+    participant SubSvc as SubscriptionService
+    participant Repo as SubscriptionRepository
+    participant FCM as FirebaseMessaging
+
+    Scheduler->>Poll: pollMovies() every 60s
+    Poll->>YTS: GET /api/v2/list_movies.json
+    YTS-->>Poll: MovieResponse
+    alt Response has movies
+        loop each movie in response
+            alt movie ID not seen before
+                Poll->>Poll: add ID to seenMovieIds
+                Poll->>Notif: sendMovieNotification(title)
+                Notif->>SubSvc: getAllSubscriptions()
+                SubSvc->>Repo: findAll()
+                Repo-->>SubSvc: subscriptions
+                SubSvc-->>Notif: subscriptions
+                loop each subscription token
+                    Notif->>FCM: send(Message{title, token})
+                    FCM-->>Notif: message id or error
+                end
+            else already seen
+                Poll->>Poll: skip
+            end
+        end
+    else Response empty/null
+        Poll->>Poll: log warning
+    end
+```
+
 ## Prerequisites
 
 - Linux (script is Bash-based).
