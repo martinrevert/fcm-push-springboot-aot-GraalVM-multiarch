@@ -11,6 +11,9 @@
         "pattern": "application.properties"
       },
       {
+        "pattern": "admin_sdk.properties"
+      },
+      {
         "pattern": "org/hibernate/hibernate-mapping-3.0.dtd"
       },
       {
