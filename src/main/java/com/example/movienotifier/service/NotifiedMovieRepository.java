@@ -5,6 +5,5 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface NotifiedMovieRepository extends JpaRepository<NotifiedMovie, Integer> {
-    boolean existsByMovieId(Integer movieId);
 }
 

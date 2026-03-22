@@ -2,11 +2,10 @@ package com.example.movienotifier.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
-import java.util.HashSet;
-import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
@@ -15,14 +14,18 @@ public class MoviePollingService {
     private static final Logger logger = LoggerFactory.getLogger(MoviePollingService.class);
 
     private final RestClient restClient;
-    private final Set<Integer> seenMovieIds;
     private final NotificationService notificationService;
+    private final NotifiedMovieRepository notifiedMovieRepository;
 
     @Autowired
-    public MoviePollingService(NotificationService notificationService, RestClient restClient) {
+    public MoviePollingService(
+        NotificationService notificationService,
+        RestClient restClient,
+        NotifiedMovieRepository notifiedMovieRepository
+    ) {
         this.restClient = restClient;
-        this.seenMovieIds = new HashSet<>();
         this.notificationService = notificationService;
+        this.notifiedMovieRepository = notifiedMovieRepository;
     }
 
     @Scheduled(fixedRate = 60000) // every 60 seconds
@@ -53,10 +56,10 @@ public class MoviePollingService {
                 );
                 int newMoviesCount = 0;
                 for (MovieResponse.Movie movie : response.getData().getMovies()) {
-                    if (!seenMovieIds.contains(movie.getId())) {
-                        seenMovieIds.add(movie.getId());
-                        notificationService.sendMovieNotification(movie.getTitle());
-                        logger.info("Found new movie: {} (ID: {})", movie.getTitle(), movie.getId());
+                    if (tryMarkMovieAsNotified(movie)) {
+                        String movieTitle = resolveMovieTitle(movie);
+                        notificationService.sendMovieNotification(movieTitle);
+                        logger.info("Found new movie: {} (ID: {})", movieTitle, movie.getId());
                         newMoviesCount++;
                     }
                 }
@@ -71,5 +74,31 @@ public class MoviePollingService {
         } catch (Exception e) {
             logger.error("Error while polling for movies", e);
         }
+    }
+
+    private boolean tryMarkMovieAsNotified(MovieResponse.Movie movie) {
+        Integer movieId = movie.getId();
+        if (notifiedMovieRepository.existsById(movieId)) {
+            return false;
+        }
+
+        try {
+            // Persist first so notified_movies remains the source of truth across restarts.
+            notifiedMovieRepository.saveAndFlush(new NotifiedMovie(movieId, resolveMovieTitle(movie)));
+            return true;
+        } catch (DataIntegrityViolationException e) {
+            logger.debug("Movie already claimed by another poll cycle: {}", movieId);
+            return false;
+        }
+    }
+
+    private String resolveMovieTitle(MovieResponse.Movie movie) {
+        if (movie.getTitle() != null && !movie.getTitle().isBlank()) {
+            return movie.getTitle();
+        }
+        if (movie.getTitleLong() != null && !movie.getTitleLong().isBlank()) {
+            return movie.getTitleLong();
+        }
+        return "Movie " + movie.getId();
     }
 }
