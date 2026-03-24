@@ -20,6 +20,13 @@ public class MoviePollingService {
     private final NotificationService notificationService;
     private final NotifiedMovieRepository notifiedMovieRepository;
 
+    /**
+     * Creates the polling service.
+     *
+     * @param notificationService service used to send push notifications
+     * @param restClient HTTP client used to call YTS
+     * @param notifiedMovieRepository repository used for deduplication persistence
+     */
     @Autowired
     public MoviePollingService(
         NotificationService notificationService,
@@ -31,6 +38,9 @@ public class MoviePollingService {
         this.notifiedMovieRepository = notifiedMovieRepository;
     }
 
+    /**
+     * Polls YTS for movies and notifies subscribers about unseen entries.
+     */
     @Scheduled(fixedRateString = "${movie.polling.fixed-rate-ms:60000}")
     public void pollMovies() {
         logger.info("Polling for new movies...");
@@ -79,6 +89,12 @@ public class MoviePollingService {
         }
     }
 
+    /**
+     * Tries to mark a movie as notified, preventing duplicate sends across cycles/restarts.
+     *
+     * @param movie movie candidate from YTS response
+     * @return true when movie is newly persisted and should be notified
+     */
     private boolean tryMarkMovieAsNotified(MovieResponse.Movie movie) {
         Integer movieId = movie.getId();
         if (notifiedMovieRepository.existsById(movieId)) {
@@ -95,6 +111,12 @@ public class MoviePollingService {
         }
     }
 
+    /**
+     * Resolves the best available movie title for notifications.
+     *
+     * @param movie movie payload from YTS
+     * @return title to send in notifications
+     */
     private String resolveMovieTitle(MovieResponse.Movie movie) {
         if (movie.getTitle() != null && !movie.getTitle().isBlank()) {
             return movie.getTitle();

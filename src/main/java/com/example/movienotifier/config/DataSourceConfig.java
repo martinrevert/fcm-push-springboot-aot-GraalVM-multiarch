@@ -19,6 +19,12 @@ public class DataSourceConfig {
 
     private static final Logger logger = LoggerFactory.getLogger(DataSourceConfig.class);
 
+    /**
+     * Builds the primary datasource using MariaDB datasource properties.
+     *
+     * @param props bound datasource properties
+     * @return configured Hikari datasource
+     */
     @Bean
     @Primary
     public DataSource dataSource(DataSourceProperties props) {
@@ -51,14 +57,61 @@ public class DataSourceConfig {
         private String username;
         private String password;
         private String driverClassName;
-        // getters and setters
+
+        /**
+         * Gets the JDBC URL.
+         *
+         * @return datasource URL
+         */
         public String getUrl() { return url; }
+
+        /**
+         * Sets the JDBC URL.
+         *
+         * @param url datasource URL
+         */
         public void setUrl(String url) { this.url = url; }
+
+        /**
+         * Gets the datasource username.
+         *
+         * @return datasource username
+         */
         public String getUsername() { return username; }
+
+        /**
+         * Sets the datasource username.
+         *
+         * @param username datasource username
+         */
         public void setUsername(String username) { this.username = username; }
+
+        /**
+         * Gets the datasource password.
+         *
+         * @return datasource password
+         */
         public String getPassword() { return password; }
+
+        /**
+         * Sets the datasource password.
+         *
+         * @param password datasource password
+         */
         public void setPassword(String password) { this.password = password; }
+
+        /**
+         * Gets the JDBC driver class name.
+         *
+         * @return driver class name
+         */
         public String getDriverClassName() { return driverClassName; }
+
+        /**
+         * Sets the JDBC driver class name.
+         *
+         * @param driverClassName driver class name
+         */
         public void setDriverClassName(String driverClassName) { this.driverClassName = driverClassName; }
     }
 }

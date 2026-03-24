@@ -13,6 +13,11 @@ public class RestClientConfig {
 
     private static final Logger logger = LoggerFactory.getLogger(RestClientConfig.class);
 
+    /**
+     * Creates the shared RestClient used to call external HTTP APIs.
+     *
+     * @return configured RestClient instance with redirect handling and logging interceptor
+     */
     @Bean
     public RestClient restClient() {
         HttpClient httpClient = HttpClient.newBuilder()

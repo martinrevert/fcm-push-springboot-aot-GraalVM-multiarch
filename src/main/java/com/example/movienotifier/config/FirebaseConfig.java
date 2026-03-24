@@ -16,6 +16,11 @@ public class FirebaseConfig {
     @Value("${firebase.service-account-file}")
     private String serviceAccountFile;
 
+    /**
+     * Initializes the default Firebase application from the configured service account file.
+     *
+     * @throws IOException when the credentials file cannot be read
+     */
     @PostConstruct
     public void init() throws IOException {
         FileInputStream serviceAccount = new FileInputStream(serviceAccountFile);
@@ -27,6 +32,11 @@ public class FirebaseConfig {
         }
     }
 
+    /**
+     * Exposes the FirebaseMessaging singleton as a Spring bean.
+     *
+     * @return FirebaseMessaging instance bound to the default Firebase app
+     */
     @Bean
     public FirebaseMessaging firebaseMessaging() {
         return FirebaseMessaging.getInstance();

@@ -27,12 +27,24 @@ public class NotificationService {
     private final SubscriptionService subscriptionService;
     private final FirebaseMessaging firebaseMessaging;
 
+    /**
+     * Creates the notification service with subscription access and Firebase messaging client.
+     *
+     * @param subscriptionService service used to load and remove subscriptions
+     * @param firebaseMessaging Firebase Admin client used to send messages
+     */
     @Autowired
     public NotificationService(SubscriptionService subscriptionService, FirebaseMessaging firebaseMessaging) {
         this.subscriptionService = subscriptionService;
         this.firebaseMessaging = firebaseMessaging;
     }
 
+    /**
+     * Sends a movie notification to every currently subscribed token.
+     * Invalid tokens are removed when Firebase reports terminal token errors.
+     *
+     * @param title movie title to include in the push payload
+     */
     public void sendMovieNotification(String title) {
         String resolvedTitle = normalizeTitle(title);
         String resolvedBody = buildNotificationBody(resolvedTitle);
@@ -70,6 +82,14 @@ public class NotificationService {
         }
     }
 
+    /**
+     * Builds a platform-aware FCM message with notification and data payloads.
+     *
+     * @param title push notification title
+     * @param body push notification body
+     * @param token destination FCM registration token
+     * @return fully built Firebase message
+     */
     private Message buildMessage(String title, String body, String token) {
         return Message.builder()
                 .setToken(token)
@@ -100,6 +120,12 @@ public class NotificationService {
                 .build();
     }
 
+    /**
+     * Normalizes input title, returning a safe fallback when blank.
+     *
+     * @param title candidate movie title
+     * @return normalized title used for notification payloads
+     */
     private String normalizeTitle(String title) {
         if (title == null || title.isBlank()) {
             return "New movie";
@@ -107,10 +133,22 @@ public class NotificationService {
         return title;
     }
 
+    /**
+     * Builds the notification body text displayed to the user.
+     *
+     * @param title normalized movie title
+     * @return notification body text
+     */
     private String buildNotificationBody(String title) {
         return "Now available: " + title;
     }
 
+    /**
+     * Validates token presence while preserving original token bytes.
+     *
+     * @param token raw registration token from storage
+     * @return token if usable, otherwise null
+     */
     private String validateToken(String token) {
         if (token == null) {
             return null;
@@ -119,6 +157,12 @@ public class NotificationService {
         return token.isBlank() ? null : token;
     }
 
+    /**
+     * Produces a shortened token representation for safe log output.
+     *
+     * @param token full registration token
+     * @return masked token preserving start and end segments
+     */
     private String shortenToken(String token) {
         if (token.length() <= 12) {
             return token;
@@ -126,6 +170,12 @@ public class NotificationService {
         return token.substring(0, 8) + "..." + token.substring(token.length() - 4);
     }
 
+    /**
+     * Determines whether a Firebase error means the subscription must be deleted.
+     *
+     * @param exception Firebase send exception
+     * @return true when the token is permanently invalid/unregistered
+     */
     private boolean shouldDeleteSubscription(FirebaseMessagingException exception) {
         MessagingErrorCode messagingErrorCode = exception.getMessagingErrorCode();
         if (messagingErrorCode == MessagingErrorCode.UNREGISTERED || messagingErrorCode == MessagingErrorCode.SENDER_ID_MISMATCH) {
@@ -145,6 +195,12 @@ public class NotificationService {
         return normalized.equals("UNREGISTERED") || normalized.equals("REGISTRATION_TOKEN_NOT_REGISTERED");
     }
 
+    /**
+     * Detects invalid-token signals in INVALID_ARGUMENT error messages.
+     *
+     * @param exception Firebase send exception
+     * @return true when message text indicates an invalid registration token
+     */
     private boolean looksLikeInvalidToken(FirebaseMessagingException exception) {
         String message = exception.getMessage();
         if (message == null) {
