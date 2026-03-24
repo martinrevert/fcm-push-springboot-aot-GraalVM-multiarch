@@ -1,4 +1,4 @@
-package com.example.movienotifier.service;
+package com.example.movienotifier.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -73,3 +73,4 @@ public class MovieResponse {
         public void setYear(Integer year) { this.year = year; }
     }
 }
+

@@ -1,4 +1,4 @@
-package com.example.movienotifier.service;
+package com.example.movienotifier.model;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -66,3 +66,4 @@ public class Subscription {
                '}';
     }
 }
+

@@ -1,5 +1,6 @@
 package com.example.movienotifier.service;
 
+import com.example.movienotifier.model.Subscription;
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.FirebaseMessagingException;
 import com.google.firebase.messaging.Message;

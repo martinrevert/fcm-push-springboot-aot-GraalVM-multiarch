@@ -1,5 +1,8 @@
 package com.example.movienotifier.service;
 
+import com.example.movienotifier.model.MovieResponse;
+import com.example.movienotifier.model.NotifiedMovie;
+import com.example.movienotifier.repository.NotifiedMovieRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;

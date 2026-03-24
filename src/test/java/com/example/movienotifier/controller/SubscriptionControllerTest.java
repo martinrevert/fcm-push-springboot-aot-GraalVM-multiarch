@@ -1,6 +1,6 @@
 package com.example.movienotifier.controller;
 
-import com.example.movienotifier.service.Subscription;
+import com.example.movienotifier.model.Subscription;
 import com.example.movienotifier.service.SubscriptionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

@@ -1,6 +1,6 @@
 package com.example.movienotifier.controller;
 
-import com.example.movienotifier.service.Subscription;
+import com.example.movienotifier.model.Subscription;
 import com.example.movienotifier.service.SubscriptionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;

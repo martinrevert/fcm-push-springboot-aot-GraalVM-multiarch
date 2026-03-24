@@ -1,5 +1,8 @@
 package com.example.movienotifier.service;
 
+import com.example.movienotifier.model.MovieResponse;
+import com.example.movienotifier.model.NotifiedMovie;
+import com.example.movienotifier.repository.NotifiedMovieRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

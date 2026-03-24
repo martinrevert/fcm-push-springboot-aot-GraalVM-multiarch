@@ -1,5 +1,6 @@
 package com.example.movienotifier.service;
 
+import com.example.movienotifier.model.MovieResponse;
 import tools.jackson.databind.json.JsonMapper;
 
 import org.junit.jupiter.api.Test;

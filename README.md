@@ -13,13 +13,15 @@ Spring Boot service that polls YTS and sends Firebase Cloud Messaging (FCM) push
 
 ## Project Layout
 
-- App entrypoint: `src/main/java/com/example/movienotifier/MovieNotifierApplication.java`
-- Subscription API: `src/main/java/com/example/movienotifier/controller/SubscriptionController.java`
-- Polling flow: `src/main/java/com/example/movienotifier/service/MoviePollingService.java`
-- Notification flow: `src/main/java/com/example/movienotifier/service/NotificationService.java`
-- Runtime config: `src/main/resources/application.properties`
-- Native build script: `build-native.sh`
+- Entrypoint: `src/main/java/com/example/movienotifier/MovieNotifierApplication.java`
+- Config package: `src/main/java/com/example/movienotifier/config` (`DataSourceConfig`, `RestClientConfig`, `FirebaseConfig`, `SchedulingConfig`)
+- Controller package: `src/main/java/com/example/movienotifier/controller` (`SubscriptionController`)
+- Service package: `src/main/java/com/example/movienotifier/service` (`SubscriptionService`, `MoviePollingService`, `NotificationService`)
+- Repository package: `src/main/java/com/example/movienotifier/repository` (`SubscriptionRepository`, `NotifiedMovieRepository`)
+- Model package: `src/main/java/com/example/movienotifier/model` (`Subscription`, `NotifiedMovie`, `MovieResponse`)
+- Runtime config file: `src/main/resources/application.properties`
 - Native reflection config: `src/main/resources/META-INF/native-image/com.example/movie-notifier/reflect-config.json`
+- Native build script: `build-native.sh`
 
 ## Architecture
 
