@@ -165,6 +165,12 @@ public class MovieResponse {
 
         private Integer year;
 
+        @JsonProperty("medium_cover_image")
+        private String mediumCoverImage;
+
+        @JsonProperty("large_cover_image")
+        private String largeCoverImage;
+
         /**
          * Gets movie id.
          *
@@ -235,6 +241,42 @@ public class MovieResponse {
          */
         public void setYear(Integer year) {
             this.year = year;
+        }
+
+        /**
+         * Gets medium poster image URL.
+         *
+         * @return medium cover URL
+         */
+        public String getMediumCoverImage() {
+            return mediumCoverImage;
+        }
+
+        /**
+         * Sets medium poster image URL.
+         *
+         * @param mediumCoverImage medium cover URL
+         */
+        public void setMediumCoverImage(String mediumCoverImage) {
+            this.mediumCoverImage = mediumCoverImage;
+        }
+
+        /**
+         * Gets large poster image URL.
+         *
+         * @return large cover URL
+         */
+        public String getLargeCoverImage() {
+            return largeCoverImage;
+        }
+
+        /**
+         * Sets large poster image URL.
+         *
+         * @param largeCoverImage large cover URL
+         */
+        public void setLargeCoverImage(String largeCoverImage) {
+            this.largeCoverImage = largeCoverImage;
         }
     }
 }

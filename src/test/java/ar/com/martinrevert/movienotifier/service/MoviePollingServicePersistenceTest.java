@@ -18,6 +18,7 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -53,8 +54,8 @@ class MoviePollingServicePersistenceTest {
 
         InOrder inOrder = inOrder(notifiedMovieRepository, notificationService);
         inOrder.verify(notifiedMovieRepository).saveAndFlush(any(NotifiedMovie.class));
-        inOrder.verify(notificationService).sendMovieNotification("Test Movie");
-        verify(notificationService).sendMovieNotification("Test Movie");
+        inOrder.verify(notificationService).sendMovieNotification(eq("Test Movie"), isNull(), isNull(), isNull(), isNull());
+        verify(notificationService).sendMovieNotification(eq("Test Movie"), isNull(), isNull(), isNull(), isNull());
         verify(notifiedMovieRepository).saveAndFlush(any(NotifiedMovie.class));
     }
 

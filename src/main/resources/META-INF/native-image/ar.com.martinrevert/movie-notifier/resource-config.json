@@ -1,0 +1,10 @@
+{
+  "resources": {
+    "includes": [
+      {
+        "pattern": "admin_sdk\\.properties"
+      }
+    ]
+  }
+}
+

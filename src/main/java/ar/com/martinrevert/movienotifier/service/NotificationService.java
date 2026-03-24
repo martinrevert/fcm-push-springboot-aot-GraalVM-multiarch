@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.stream.Collectors;
 
 @Service
 public class NotificationService {
@@ -46,8 +47,25 @@ public class NotificationService {
      * @param title movie title to include in the push payload
      */
     public void sendMovieNotification(String title) {
+        sendMovieNotification(title, null, null, null, null);
+    }
+
+    /**
+     * Sends a movie notification with enriched metadata.
+     *
+     * @param title movie title
+     * @param posterUrl poster image URL
+     * @param genres movie genres
+     * @param language movie language
+     * @param rating movie rating
+     */
+    public void sendMovieNotification(String title, String posterUrl, List<String> genres, String language, Double rating) {
         String resolvedTitle = normalizeTitle(title);
-        String resolvedBody = buildNotificationBody(resolvedTitle);
+        String resolvedPosterUrl = normalizePosterUrl(posterUrl);
+        String resolvedGenres = normalizeGenres(genres);
+        String resolvedLanguage = normalizeLanguage(language);
+        String resolvedRating = normalizeRating(rating);
+        String resolvedBody = buildNotificationBody(resolvedGenres, resolvedLanguage, resolvedRating);
 
         List<Subscription> subscriptions = subscriptionService.getAllSubscriptions();
         if (subscriptions.isEmpty()) {
@@ -67,7 +85,15 @@ public class NotificationService {
             logger.debug("Preparing FCM message for subscription id={} token={}",
                     subscription.getId(), shortenToken(token));
 
-            Message message = buildMessage(resolvedTitle, resolvedBody, token);
+            Message message = buildMessage(
+                resolvedTitle,
+                resolvedBody,
+                resolvedPosterUrl,
+                resolvedGenres,
+                resolvedLanguage,
+                resolvedRating,
+                token
+            );
 
             try {
                 String response = firebaseMessaging.send(message);
@@ -87,24 +113,39 @@ public class NotificationService {
      *
      * @param title push notification title
      * @param body push notification body
+     * @param posterUrl poster image URL
+     * @param genres normalized genres text
+     * @param language normalized language text
+     * @param rating normalized rating text
      * @param token destination FCM registration token
      * @return fully built Firebase message
      */
-    private Message buildMessage(String title, String body, String token) {
+    private Message buildMessage(String title, String body, String posterUrl, String genres, String language, String rating, String token) {
+        Notification.Builder notificationBuilder = Notification.builder()
+                .setTitle(title)
+                .setBody(body);
+
+        AndroidNotification.Builder androidNotificationBuilder = AndroidNotification.builder()
+                .setTitle(title)
+                .setBody(body);
+
+        if (posterUrl != null) {
+            notificationBuilder.setImage(posterUrl);
+            androidNotificationBuilder.setImage(posterUrl);
+        }
+
         return Message.builder()
                 .setToken(token)
-                .setNotification(Notification.builder()
-                        .setTitle(title)
-                        .setBody(body)
-                        .build())
+                .setNotification(notificationBuilder.build())
                 .putData("title", title)
                 .putData("body", body)
+                .putData("posterUrl", defaultString(posterUrl))
+                .putData("genres", genres)
+                .putData("language", language)
+                .putData("rating", rating)
                 .setAndroidConfig(AndroidConfig.builder()
                         .setPriority(AndroidConfig.Priority.HIGH)
-                        .setNotification(AndroidNotification.builder()
-                                .setTitle(title)
-                                .setBody(body)
-                                .build())
+                        .setNotification(androidNotificationBuilder.build())
                         .build())
                 .setApnsConfig(ApnsConfig.builder()
                         .putHeader("apns-priority", "10")
@@ -136,11 +177,78 @@ public class NotificationService {
     /**
      * Builds the notification body text displayed to the user.
      *
-     * @param title normalized movie title
+     * @param genres normalized genres text
+     * @param language normalized language text
+     * @param rating normalized rating text
      * @return notification body text
      */
-    private String buildNotificationBody(String title) {
-        return "Now available: " + title;
+    private String buildNotificationBody(String genres, String language, String rating) {
+        return "Genres: " + genres + " | Language: " + language + " | Rating: " + rating;
+    }
+
+    /**
+     * Normalizes poster URL.
+     *
+     * @param posterUrl poster URL candidate
+     * @return URL when present, otherwise null
+     */
+    private String normalizePosterUrl(String posterUrl) {
+        if (posterUrl == null || posterUrl.isBlank()) {
+            return null;
+        }
+        return posterUrl;
+    }
+
+    /**
+     * Normalizes genres list into a comma-separated string.
+     *
+     * @param genres genres list
+     * @return normalized genres text
+     */
+    private String normalizeGenres(List<String> genres) {
+        if (genres == null || genres.isEmpty()) {
+            return "Unknown";
+        }
+        String joined = genres.stream()
+            .filter(value -> value != null && !value.isBlank())
+            .collect(Collectors.joining(", "));
+        return joined.isBlank() ? "Unknown" : joined;
+    }
+
+    /**
+     * Normalizes language string.
+     *
+     * @param language language candidate
+     * @return normalized language
+     */
+    private String normalizeLanguage(String language) {
+        if (language == null || language.isBlank()) {
+            return "Unknown";
+        }
+        return language;
+    }
+
+    /**
+     * Normalizes rating value.
+     *
+     * @param rating rating candidate
+     * @return normalized rating text
+     */
+    private String normalizeRating(Double rating) {
+        if (rating == null) {
+            return "N/A";
+        }
+        return String.format(Locale.US, "%.1f", rating);
+    }
+
+    /**
+     * Converts nullable value to non-null string for data payload.
+     *
+     * @param value input value
+     * @return original value or empty string
+     */
+    private String defaultString(String value) {
+        return value == null ? "" : value;
     }
 
     /**

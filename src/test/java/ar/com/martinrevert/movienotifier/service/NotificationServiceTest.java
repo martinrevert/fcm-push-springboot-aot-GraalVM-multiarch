@@ -115,7 +115,13 @@ class NotificationServiceTest {
         when(subscriptionService.getAllSubscriptions()).thenReturn(List.of(valid));
         when(firebaseMessaging.send(any())).thenReturn("ok");
 
-        notificationService.sendMovieNotification("Movie");
+        notificationService.sendMovieNotification(
+            "Movie",
+            "https://img.example/poster.jpg",
+            List.of("Action", "Drama"),
+            "Spanish",
+            8.7
+        );
 
         ArgumentCaptor<Message> messageCaptor = ArgumentCaptor.forClass(Message.class);
         verify(firebaseMessaging).send(messageCaptor.capture());
@@ -123,11 +129,16 @@ class NotificationServiceTest {
         assertEquals("valid-token", extractToken(sentMessage));
         Map<String, String> data = extractData(sentMessage);
         assertEquals("Movie", data.get("title"));
-        assertEquals("Now available: Movie", data.get("body"));
+        assertEquals("Genres: Action, Drama | Language: Spanish | Rating: 8.7", data.get("body"));
+        assertEquals("https://img.example/poster.jpg", data.get("posterUrl"));
+        assertEquals("Action, Drama", data.get("genres"));
+        assertEquals("Spanish", data.get("language"));
+        assertEquals("8.7", data.get("rating"));
 
         Object notification = extractNotification(sentMessage);
         assertEquals("Movie", extractStringField(notification, "title"));
-        assertEquals("Now available: Movie", extractStringField(notification, "body"));
+        assertEquals("Genres: Action, Drama | Language: Spanish | Rating: 8.7", extractStringField(notification, "body"));
+        assertEquals("https://img.example/poster.jpg", extractStringField(notification, "image"));
     }
 
     private String extractToken(Message message) throws Exception {

@@ -24,6 +24,8 @@ class MovieResponseDeserializationTest {
                     "id": 75189,
                     "title": "Fez Summer '55",
                     "title_long": "Fez Summer '55 (2023)",
+                    "medium_cover_image": "https://img.example/medium.jpg",
+                    "large_cover_image": "https://img.example/large.jpg",
                     "year": 2023
                   },
                   {
@@ -51,6 +53,8 @@ class MovieResponseDeserializationTest {
         assertEquals(2, response.getData().getMovies().size());
         assertEquals(75189, response.getData().getMovies().get(0).getId());
         assertEquals("Fez Summer '55", response.getData().getMovies().get(0).getTitle());
+        assertEquals("https://img.example/medium.jpg", response.getData().getMovies().get(0).getMediumCoverImage());
+        assertEquals("https://img.example/large.jpg", response.getData().getMovies().get(0).getLargeCoverImage());
     }
 }
 

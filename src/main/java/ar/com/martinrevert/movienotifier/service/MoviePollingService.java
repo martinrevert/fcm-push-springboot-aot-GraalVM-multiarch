@@ -1,6 +1,7 @@
 package ar.com.martinrevert.movienotifier.service;
 
 import ar.com.martinrevert.movienotifier.model.MovieResponse;
+import ar.com.martinrevert.movienotifier.model.MovieDetailsResponse;
 import ar.com.martinrevert.movienotifier.model.NotifiedMovie;
 import ar.com.martinrevert.movienotifier.repository.NotifiedMovieRepository;
 import org.slf4j.Logger;
@@ -71,7 +72,14 @@ public class MoviePollingService {
                 for (MovieResponse.Movie movie : response.getData().getMovies()) {
                     if (tryMarkMovieAsNotified(movie)) {
                         String movieTitle = resolveMovieTitle(movie);
-                        notificationService.sendMovieNotification(movieTitle);
+                        MovieDetailsResponse.Movie details = fetchMovieDetails(movie.getId());
+                        notificationService.sendMovieNotification(
+                            movieTitle,
+                            resolvePosterUrl(movie),
+                            details != null ? details.getGenres() : null,
+                            details != null ? details.getLanguage() : null,
+                            details != null ? details.getRating() : null
+                        );
                         logger.info("Found new movie: {} (ID: {})", movieTitle, movie.getId());
                         newMoviesCount++;
                     }
@@ -125,6 +133,46 @@ public class MoviePollingService {
             return movie.getTitleLong();
         }
         return "Movie " + movie.getId();
+    }
+
+    /**
+     * Resolves poster URL from list_movies payload.
+     *
+     * @param movie movie payload from YTS
+     * @return poster URL or null
+     */
+    private String resolvePosterUrl(MovieResponse.Movie movie) {
+        if (movie.getLargeCoverImage() != null && !movie.getLargeCoverImage().isBlank()) {
+            return movie.getLargeCoverImage();
+        }
+        if (movie.getMediumCoverImage() != null && !movie.getMediumCoverImage().isBlank()) {
+            return movie.getMediumCoverImage();
+        }
+        return null;
+    }
+
+    /**
+     * Fetches movie details from YTS details endpoint.
+     *
+     * @param movieId movie identifier
+     * @return movie detail payload or null when unavailable
+     */
+    private MovieDetailsResponse.Movie fetchMovieDetails(Integer movieId) {
+        try {
+            MovieDetailsResponse detailsResponse = restClient
+                .get()
+                .uri("https://yts.bz/api/v2/movie_details.json?movie_id={movieId}", movieId)
+                .retrieve()
+                .body(MovieDetailsResponse.class);
+
+            if (detailsResponse == null || detailsResponse.getData() == null) {
+                return null;
+            }
+            return detailsResponse.getData().getMovie();
+        } catch (Exception e) {
+            logger.warn("Could not fetch movie details for id={}. Sending basic payload.", movieId);
+            return null;
+        }
     }
 }
 

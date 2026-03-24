@@ -984,6 +984,33 @@
     "allPublicFields": true
   },
   {
+    "name": "ar.com.martinrevert.movienotifier.model.MovieDetailsResponse",
+    "allDeclaredConstructors": true,
+    "allPublicConstructors": true,
+    "allDeclaredMethods": true,
+    "allPublicMethods": true,
+    "allDeclaredFields": true,
+    "allPublicFields": true
+  },
+  {
+    "name": "ar.com.martinrevert.movienotifier.model.MovieDetailsResponse$Data",
+    "allDeclaredConstructors": true,
+    "allPublicConstructors": true,
+    "allDeclaredMethods": true,
+    "allPublicMethods": true,
+    "allDeclaredFields": true,
+    "allPublicFields": true
+  },
+  {
+    "name": "ar.com.martinrevert.movienotifier.model.MovieDetailsResponse$Movie",
+    "allDeclaredConstructors": true,
+    "allPublicConstructors": true,
+    "allDeclaredMethods": true,
+    "allPublicMethods": true,
+    "allDeclaredFields": true,
+    "allPublicFields": true
+  },
+  {
     "name": "com.google.firebase.messaging.Message",
     "allDeclaredConstructors": true,
     "allPublicConstructors": true,
