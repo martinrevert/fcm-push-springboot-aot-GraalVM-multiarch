@@ -13,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.lang.reflect.Field;
 import java.util.List;
+import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -108,7 +109,7 @@ class NotificationServiceTest {
     }
 
     @Test
-    void sendMovieNotificationSetsMessageRecipientToken() throws Exception {
+    void sendMovieNotificationBuildsNotificationAndDataPayload() throws Exception {
         Subscription valid = new Subscription("valid-token");
         when(subscriptionService.getAllSubscriptions()).thenReturn(List.of(valid));
         when(firebaseMessaging.send(any())).thenReturn("ok");
@@ -119,12 +120,36 @@ class NotificationServiceTest {
         verify(firebaseMessaging).send(messageCaptor.capture());
         Message sentMessage = messageCaptor.getValue();
         assertEquals("valid-token", extractToken(sentMessage));
+        Map<String, String> data = extractData(sentMessage);
+        assertEquals("Movie", data.get("title"));
+        assertEquals("Now available: Movie", data.get("body"));
+
+        Object notification = extractNotification(sentMessage);
+        assertEquals("Movie", extractStringField(notification, "title"));
+        assertEquals("Now available: Movie", extractStringField(notification, "body"));
     }
 
     private String extractToken(Message message) throws Exception {
-        Field field = Message.class.getDeclaredField("token");
+        return extractStringField(message, "token");
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, String> extractData(Message message) throws Exception {
+        Field field = Message.class.getDeclaredField("data");
         field.setAccessible(true);
-        return (String) field.get(message);
+        return (Map<String, String>) field.get(message);
+    }
+
+    private Object extractNotification(Message message) throws Exception {
+        Field field = Message.class.getDeclaredField("notification");
+        field.setAccessible(true);
+        return field.get(message);
+    }
+
+    private String extractStringField(Object object, String fieldName) throws Exception {
+        Field field = object.getClass().getDeclaredField(fieldName);
+        field.setAccessible(true);
+        return (String) field.get(object);
     }
 }
 
