@@ -1,0 +1,97 @@
+package ar.com.martinrevert.movienotifier.service;
+
+import ar.com.martinrevert.movienotifier.model.Subscription;
+import ar.com.martinrevert.movienotifier.repository.SubscriptionRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Optional;
+
+@Service
+public class SubscriptionService {
+
+    private static final Logger logger = LoggerFactory.getLogger(SubscriptionService.class);
+
+    private final SubscriptionRepository subscriptionRepository;
+
+    /**
+     * Creates the subscription service.
+     *
+     * @param subscriptionRepository repository for subscription persistence
+     */
+    @Autowired
+    public SubscriptionService(SubscriptionRepository subscriptionRepository) {
+        this.subscriptionRepository = subscriptionRepository;
+    }
+
+    /**
+     * Subscribes a registration token, returning existing data if token is already present.
+     *
+     * @param registrationToken FCM registration token
+     * @return persisted or existing subscription
+     */
+    public Subscription subscribe(String registrationToken) {
+        String normalizedToken = normalizeToken(registrationToken);
+        Optional<Subscription> existingSubscription = subscriptionRepository.findByRegistrationToken(normalizedToken);
+        if (existingSubscription.isPresent()) {
+            logger.info("Registration token already exists: {}", normalizedToken);
+            return existingSubscription.get();
+        } else {
+            Subscription newSubscription = new Subscription(normalizedToken);
+            try {
+                Subscription savedSubscription = subscriptionRepository.save(newSubscription);
+                logger.info("New subscription added: {}", savedSubscription);
+                return savedSubscription;
+            } catch (DataIntegrityViolationException e) {
+                // Another request inserted the same token first. Treat as idempotent success.
+                return subscriptionRepository.findByRegistrationToken(normalizedToken)
+                    .map(subscription -> {
+                        logger.info("Registration token already existed after concurrent insert: {}", normalizedToken);
+                        return subscription;
+                    })
+                    .orElseThrow(() -> e);
+            }
+        }
+    }
+
+    /**
+     * Unsubscribes a registration token when present.
+     *
+     * @param registrationToken FCM registration token
+     */
+    public void unsubscribe(String registrationToken) {
+        String normalizedToken = normalizeToken(registrationToken);
+        subscriptionRepository.findByRegistrationToken(normalizedToken).ifPresent(subscription -> {
+            subscriptionRepository.delete(subscription);
+            logger.info("Subscription removed: {}", normalizedToken);
+        });
+    }
+
+    /**
+     * Returns all currently stored subscriptions.
+     *
+     * @return list of subscriptions
+     */
+    public List<Subscription> getAllSubscriptions() {
+        return subscriptionRepository.findAll();
+    }
+
+    /**
+     * Validates a token and keeps its original contents intact.
+     *
+     * @param registrationToken raw registration token
+     * @return validated token
+     */
+    private String normalizeToken(String registrationToken) {
+        if (registrationToken == null || registrationToken.isBlank()) {
+            throw new IllegalArgumentException("FCM registration token must not be null or blank");
+        }
+        // Keep token unchanged to preserve exact bytes received from the client.
+        return registrationToken;
+    }
+}
+

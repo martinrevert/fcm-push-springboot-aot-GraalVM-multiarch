@@ -13,14 +13,14 @@ Spring Boot service that polls YTS and sends Firebase Cloud Messaging (FCM) push
 
 ## Project Layout
 
-- Entrypoint: `src/main/java/com/example/movienotifier/MovieNotifierApplication.java`
-- Config package: `src/main/java/com/example/movienotifier/config` (`DataSourceConfig`, `RestClientConfig`, `FirebaseConfig`, `SchedulingConfig`)
-- Controller package: `src/main/java/com/example/movienotifier/controller` (`SubscriptionController`)
-- Service package: `src/main/java/com/example/movienotifier/service` (`SubscriptionService`, `MoviePollingService`, `NotificationService`)
-- Repository package: `src/main/java/com/example/movienotifier/repository` (`SubscriptionRepository`, `NotifiedMovieRepository`)
-- Model package: `src/main/java/com/example/movienotifier/model` (`Subscription`, `NotifiedMovie`, `MovieResponse`)
+- Entrypoint: `src/main/java/ar/com/martinrevert/movienotifier/MovieNotifierApplication.java`
+- Config package: `src/main/java/ar/com/martinrevert/movienotifier/config` (`DataSourceConfig`, `RestClientConfig`, `FirebaseConfig`, `SchedulingConfig`)
+- Controller package: `src/main/java/ar/com/martinrevert/movienotifier/controller` (`SubscriptionController`)
+- Service package: `src/main/java/ar/com/martinrevert/movienotifier/service` (`SubscriptionService`, `MoviePollingService`, `NotificationService`)
+- Repository package: `src/main/java/ar/com/martinrevert/movienotifier/repository` (`SubscriptionRepository`, `NotifiedMovieRepository`)
+- Model package: `src/main/java/ar/com/martinrevert/movienotifier/model` (`Subscription`, `NotifiedMovie`, `MovieResponse`)
 - Runtime config file: `src/main/resources/application.properties`
-- Native reflection config: `src/main/resources/META-INF/native-image/com.example/movie-notifier/reflect-config.json`
+- Native reflection config: `src/main/resources/META-INF/native-image/ar.com.martinrevert/movie-notifier/reflect-config.json`
 - Native build script: `build-native.sh`
 
 ## Architecture

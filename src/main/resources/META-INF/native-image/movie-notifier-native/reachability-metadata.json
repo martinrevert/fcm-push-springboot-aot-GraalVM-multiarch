@@ -109,7 +109,7 @@
       "type": "com.datastax.oss.driver.api.core.CqlSession"
     },
     {
-      "type": "com.example.movienotifier.MovieNotifierApplication",
+      "type": "ar.com.martinrevert.movienotifier.MovieNotifierApplication",
       "methods": [
         {
           "name": "main",
@@ -120,7 +120,7 @@
       ]
     },
     {
-      "type": "com.example.movienotifier.MovieNotifierApplication$$SpringCGLIB$$0",
+      "type": "ar.com.martinrevert.movienotifier.MovieNotifierApplication$$SpringCGLIB$$0",
       "fields": [
         {
           "name": "$$beanFactory"
@@ -146,7 +146,7 @@
       ]
     },
     {
-      "type": "com.example.movienotifier.config.FirebaseConfig",
+      "type": "ar.com.martinrevert.movienotifier.config.FirebaseConfig",
       "fields": [
         {
           "name": "serviceAccountFile"
@@ -160,7 +160,7 @@
       ]
     },
     {
-      "type": "com.example.movienotifier.config.FirebaseConfig$$SpringCGLIB$$0",
+      "type": "ar.com.martinrevert.movienotifier.config.FirebaseConfig$$SpringCGLIB$$0",
       "fields": [
         {
           "name": "$$beanFactory"
@@ -186,7 +186,7 @@
       ]
     },
     {
-      "type": "com.example.movienotifier.service.MoviePollingService",
+      "type": "ar.com.martinrevert.movienotifier.service.MoviePollingService",
       "fields": [
         {
           "name": "notificationService"
@@ -200,7 +200,7 @@
       ]
     },
     {
-      "type": "com.example.movienotifier.service.NotificationService",
+      "type": "ar.com.martinrevert.movienotifier.service.NotificationService",
       "methods": [
         {
           "name": "<init>",
@@ -4186,16 +4186,16 @@
       "glob": "application.yml"
     },
     {
-      "glob": "com/example/movienotifier"
+      "glob": "ar/com/martinrevert/movienotifier"
     },
     {
-      "glob": "com/example/movienotifier/config/FirebaseConfig.class"
+      "glob": "ar/com/martinrevert/movienotifier/config/FirebaseConfig.class"
     },
     {
-      "glob": "com/example/movienotifier/service/MoviePollingService.class"
+      "glob": "ar/com/martinrevert/movienotifier/service/MoviePollingService.class"
     },
     {
-      "glob": "com/example/movienotifier/service/NotificationService.class"
+      "glob": "ar/com/martinrevert/movienotifier/service/NotificationService.class"
     },
     {
       "glob": "commons-logging.properties"
