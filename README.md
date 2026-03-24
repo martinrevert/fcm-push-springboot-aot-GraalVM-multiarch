@@ -1,331 +1,268 @@
 # Movie Notifier
 
-Spring Boot service that polls YTS and sends Firebase push notifications for new movies.
+Spring Boot service that polls YTS and sends Firebase Cloud Messaging (FCM) push notifications for new movies.
 
 ## What It Does
 
-- Polls movie data on a schedule.
-- Avoids duplicate notifications using persisted `notified_movies` records.
-- Sends push notifications through Firebase Admin SDK.
-- Supports JVM run and GraalVM native executable builds.
+- Polls YTS on a configurable schedule.
+- Persists notified movie IDs in `notified_movies` to avoid resend after restart.
+- Manages FCM subscriptions through a single REST controller.
+- Sends cross-platform push payloads (notification + data) via Firebase Admin SDK.
+- Removes invalid/uninstalled device tokens when FCM returns terminal token errors.
+- Supports JVM run and GraalVM native builds (AMD64 and ARM64).
 
 ## Project Layout
 
 - App entrypoint: `src/main/java/com/example/movienotifier/MovieNotifierApplication.java`
-- Data source config: `src/main/java/com/example/movienotifier/config/DataSourceConfig.java`
-- Main config: `src/main/resources/application.properties`
-- Native reflection config: `src/main/resources/META-INF/native-image/com.example/movie-notifier/reflect-config.json`
+- Subscription API: `src/main/java/com/example/movienotifier/controller/SubscriptionController.java`
+- Polling flow: `src/main/java/com/example/movienotifier/service/MoviePollingService.java`
+- Notification flow: `src/main/java/com/example/movienotifier/service/NotificationService.java`
+- Runtime config: `src/main/resources/application.properties`
 - Native build script: `build-native.sh`
+- Native reflection config: `src/main/resources/META-INF/native-image/com.example/movie-notifier/reflect-config.json`
 
-## Architecture Diagram
+## Architecture
 
 ```mermaid
 flowchart LR
-    Client["Client App"]
-    API["SubscriptionController<br/>/api/subscriptions"]
-    SubSvc["SubscriptionService"]
-    Repo[("SubscriptionRepository<br/>MariaDB")]
-    Poll["MoviePollingService<br/>Scheduled via movie.polling.fixed-rate-ms"]
-    YTS["YTS API<br/>list_movies.json"]
-    Notif["NotificationService"]
-    FCM["Firebase Cloud Messaging"]
-    Device["Subscriber Device"]
+    Client[Client App]
+    Api[SubscriptionController]
+    SubSvc[SubscriptionService]
+    SubRepo[(subscriptions table)]
+    Poller[MoviePollingService]
+    YTS[YTS API]
+    NotifiedRepo[(notified_movies table)]
+    NotifSvc[NotificationService]
+    FCM[Firebase Cloud Messaging]
+    Device[Mobile Device]
 
-    Client -->|POST subscribe/unsubscribe| API
-    API --> SubSvc
-    SubSvc --> Repo
+    Client -->|subscribe/unsubscribe| Api
+    Api --> SubSvc
+    SubSvc --> SubRepo
 
-    Poll -->|GET movies| YTS
-    Poll -->|new movie title| Notif
-    Notif --> SubSvc
-    SubSvc --> Repo
-    Notif -->|send message| FCM
+    Poller -->|GET list_movies.json| YTS
+    Poller -->|save new movie id| NotifiedRepo
+    Poller -->|notify title| NotifSvc
+    NotifSvc -->|load subscribers| SubSvc
+    NotifSvc -->|send message| FCM
     FCM --> Device
+    NotifSvc -->|remove invalid token| SubSvc
 ```
 
-## Service Flows (Sequence Diagrams)
+## Service Flows
 
-### Startup and Firebase Initialization
+### 1) Subscribe (idempotent)
 
 ```mermaid
 sequenceDiagram
-    participant App as Spring Boot App
-    participant FirebaseConfig
-    participant FS as serviceAccountKey.json
-    participant FApp as FirebaseApp
-
-    App->>FirebaseConfig: Create bean
-    FirebaseConfig->>FS: Read service account file
-    FirebaseConfig->>FApp: initializeApp(credentials)
-    FApp-->>FirebaseConfig: Firebase ready
-```
-
-### Subscribe Flow
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant Controller as SubscriptionController
-    participant Service as SubscriptionService
+    participant C as Client
+    participant Ctrl as SubscriptionController
+    participant Svc as SubscriptionService
     participant Repo as SubscriptionRepository
     participant DB as MariaDB
 
-    Client->>Controller: POST /api/subscriptions/subscribe?token=...
-    Controller->>Service: subscribe(token)
-    Service->>Repo: findByRegistrationToken(token)
+    C->>Ctrl: POST /api/subscriptions/subscribe?token=...
+    Ctrl->>Svc: subscribe(token)
+    Svc->>Repo: findByRegistrationToken(token)
     Repo->>DB: SELECT by token
-    alt Token exists
+    alt token exists
         DB-->>Repo: existing row
-        Repo-->>Service: Optional(existing)
-        Service-->>Controller: existing subscription
-    else New token
+        Repo-->>Svc: existing subscription
+        Svc-->>Ctrl: existing subscription
+    else token does not exist
         DB-->>Repo: empty
-        Repo-->>Service: Optional.empty
-        Service->>Repo: save(new Subscription(token))
+        Svc->>Repo: save(subscription)
         Repo->>DB: INSERT
-        Repo-->>Service: saved subscription
-        Service-->>Controller: saved subscription
+        alt concurrent insert race
+            DB-->>Repo: unique constraint error
+            Svc->>Repo: findByRegistrationToken(token)
+            Repo->>DB: SELECT by token
+            Repo-->>Svc: existing subscription
+        else insert success
+            Repo-->>Svc: saved subscription
+        end
+        Svc-->>Ctrl: subscription
     end
-    Controller-->>Client: 200 OK + Subscription JSON
+    Ctrl-->>C: 200 OK + Subscription JSON
 ```
 
-### Unsubscribe Flow
+### 2) Unsubscribe
 
 ```mermaid
 sequenceDiagram
-    participant Client
-    participant Controller as SubscriptionController
-    participant Service as SubscriptionService
+    participant C as Client
+    participant Ctrl as SubscriptionController
+    participant Svc as SubscriptionService
     participant Repo as SubscriptionRepository
     participant DB as MariaDB
 
-    Client->>Controller: POST /api/subscriptions/unsubscribe?token=...
-    Controller->>Service: unsubscribe(token)
-    Service->>Repo: findByRegistrationToken(token)
+    C->>Ctrl: POST /api/subscriptions/unsubscribe?token=...
+    Ctrl->>Svc: unsubscribe(token)
+    Svc->>Repo: findByRegistrationToken(token)
     Repo->>DB: SELECT by token
-    alt Token exists
-        DB-->>Repo: subscription row
-        Repo-->>Service: Optional(subscription)
-        Service->>Repo: delete(subscription)
+    alt exists
         Repo->>DB: DELETE
-    else Token not found
-        DB-->>Repo: empty
-        Repo-->>Service: Optional.empty
+    else not found
+        Svc->>Svc: no-op
     end
-    Service-->>Controller: done
-    Controller-->>Client: 204 No Content
+    Ctrl-->>C: 204 No Content
 ```
 
-### Scheduled Polling and Notification Flow
+### 3) Poll and dedupe using `notified_movies`
 
 ```mermaid
 sequenceDiagram
-    participant Scheduler as Spring Scheduler
+    participant Sch as Spring Scheduler
     participant Poll as MoviePollingService
     participant YTS as YTS API
+    participant Notified as NotifiedMovieRepository
+    participant DB as MariaDB
     participant Notif as NotificationService
-    participant SubSvc as SubscriptionService
-    participant Repo as SubscriptionRepository
-    participant FCM as FirebaseMessaging
 
-    Scheduler->>Poll: pollMovies() using configured fixed rate
+    Sch->>Poll: pollMovies() every movie.polling.fixed-rate-ms
     Poll->>YTS: GET /api/v2/list_movies.json
     YTS-->>Poll: MovieResponse
-    alt Response has movies
-        loop each movie in response
-            alt movie ID not present in notified_movies
-                Poll->>DB: saveAndFlush(NotifiedMovie)
-                Poll->>Notif: sendMovieNotification(title)
-                Notif->>SubSvc: getAllSubscriptions()
-                SubSvc->>Repo: findAll()
-                Repo-->>SubSvc: subscriptions
-                SubSvc-->>Notif: subscriptions
-                loop each subscription token
-                    Notif->>FCM: send(Message{title, token})
-                    FCM-->>Notif: message id or error
-                end
-            else already present in notified_movies
-                Poll->>Poll: skip
-            end
+    loop each movie
+        Poll->>Notified: existsById(movieId)
+        Notified->>DB: SELECT by movieId
+        alt already notified
+            Poll->>Poll: skip movie
+        else new movie
+            Poll->>Notified: saveAndFlush(movieId, title)
+            Notified->>DB: INSERT notified_movies
+            Poll->>Notif: sendMovieNotification(title)
         end
-    else Response empty/null
-        Poll->>Poll: log warning
     end
 ```
 
-## Prerequisites
+### 4) Notification send and invalid-token cleanup
 
-- Linux (script is Bash-based).
-- Java 25 only.
-- GraalVM Java 25 installed at `/opt/graalvm-amd64` for local AMD64 native builds (or adapt `build-native.sh`).
-- Docker + Buildx for AARCH64 cross-builds.
-- Firebase key file: `serviceAccountKey.json` in project root.
+```mermaid
+sequenceDiagram
+    participant Notif as NotificationService
+    participant SubSvc as SubscriptionService
+    participant FCM as FirebaseMessaging
+    participant DB as MariaDB
 
-## Known Good Build Matrix
+    Notif->>SubSvc: getAllSubscriptions()
+    SubSvc->>DB: SELECT subscriptions
+    DB-->>SubSvc: tokens
+    SubSvc-->>Notif: token list
 
-This matrix is an evidence-backed snapshot from project files and recent local build logs, not a universal compatibility guarantee.
-
-| Component | Version / Value | Source |
-|---|---|---|
-| Spring Boot plugin | `4.0.4` | `build.gradle` |
-| GraalVM Native Build Tools plugin | `0.11.1` | `build.gradle` |
-| Java source/target/toolchain | `25` | `build.gradle` |
-| Native Graal launcher constraint | GraalVM Java `25` | `build.gradle` |
-| Gradle wrapper | `9.1.0` | `gradle/wrapper/gradle-wrapper.properties` |
-| Foojay resolver plugin | `0.9.0` | `settings.gradle` |
-| Local AMD64 GraalVM path expected by script | `/opt/graalvm-amd64` | `build-native.sh` |
-| Local Java path expected by script | `/opt/graalvm-amd64` | `build-native.sh` |
-| ARM64 Docker image used by script | `ghcr.io/graalvm/native-image-community:25` | `build-native.sh` |
-| Tomcat at native runtime (observed) | `11.0.18` | recent native run logs |
-| Hibernate ORM at native runtime (observed) | `7.2.7.Final` | recent native run logs |
-
-## Quick Verify (Java 25 only)
-
-If you previously built with `sudo`, fix Gradle cache ownership first:
-
-```bash
-cd /path/to/movie-notifier
-sudo chown -R "$USER":"$USER" .gradle
+    loop each token
+        Notif->>FCM: send(Message with setToken + notification + data)
+        alt success
+            FCM-->>Notif: message id
+        else terminal token error
+            FCM-->>Notif: UNREGISTERED / SENDER_ID_MISMATCH / invalid token
+            Notif->>SubSvc: unsubscribe(token)
+            SubSvc->>DB: DELETE subscription
+        else transient error
+            FCM-->>Notif: other exception
+            Notif->>Notif: log and continue
+        end
+    end
 ```
 
-Verify wrapper + JVM toolchain:
-
-```bash
-cd /path/to/movie-notifier
-./gradlew --version
-./gradlew clean test
-```
-
-JVM run:
-
-```bash
-cd /path/to/movie-notifier
-./gradlew bootRun
-```
-
-AMD64 native build and run:
-
-```bash
-cd /path/to/movie-notifier
-./build-native.sh
-cd build/native/nativeCompile
-./movie-notifier-native
-```
-
-ARM64 cross-build (Docker Buildx + QEMU) and architecture check:
-
-```bash
-cd /path/to/movie-notifier
-sudo ./build-native.sh aarch64
-file build/native/nativeCompile/movie-notifier-native
-```
-
-## Run and Build Reference
-
-Use `## Quick Verify (Java 25 only)` as the primary copy/paste flow.
-
-- JVM task name is `bootRun` (not `runBoot`).
-- Native build script is `./build-native.sh` (AMD64 local) or `./build-native.sh aarch64` (ARM64 cross-build).
-- Native output directory is `build/native/nativeCompile`.
-- Native binary path is `build/native/nativeCompile/movie-notifier-native`.
-- Copied runtime files are `build/native/nativeCompile/application.properties` and `build/native/nativeCompile/serviceAccountKey.json` (if present).
-
-## Subscription REST API
+## REST API
 
 Base path: `/api/subscriptions`
 
 ### Subscribe
 
-- Endpoint: `POST /api/subscriptions/subscribe`
-- Input: required query parameter `token`
-- Returns: `200 OK` with `Subscription` JSON
+- `POST /api/subscriptions/subscribe?token=<FCM_REGISTRATION_TOKEN>`
+- Returns `200 OK` and `Subscription` JSON.
+- Repeating the same token is idempotent (returns existing subscription).
 
 ```bash
-curl -X POST "http://localhost:8080/api/subscriptions/subscribe?token=<FCM_REGISTRATION_TOKEN>"
-```
-
-Example response (`200 OK`):
-
-```json
-{
-  "id": 1,
-  "registrationToken": "<FCM_REGISTRATION_TOKEN>",
-  "subscribedAt": "2026-03-21T10:15:30.123456"
-}
+curl -X POST "http://localhost:10000/api/subscriptions/subscribe?token=<FCM_REGISTRATION_TOKEN>"
 ```
 
 ### Unsubscribe
 
-- Endpoint: `POST /api/subscriptions/unsubscribe`
-- Input: required query parameter `token`
-- Returns: `204 No Content`
+- `POST /api/subscriptions/unsubscribe?token=<FCM_REGISTRATION_TOKEN>`
+- Returns `204 No Content`.
 
 ```bash
-curl -X POST "http://localhost:8080/api/subscriptions/unsubscribe?token=<FCM_REGISTRATION_TOKEN>" -i
+curl -i -X POST "http://localhost:10000/api/subscriptions/unsubscribe?token=<FCM_REGISTRATION_TOKEN>"
 ```
 
-Validation note:
+Validation:
 
-- Missing `token`: `400 Bad Request`
+- Missing or blank `token` returns `400 Bad Request`.
 
 ## Configuration
 
-Main runtime config is in `src/main/resources/application.properties`.
+Main file: `src/main/resources/application.properties`
 
-Current app expects:
-
-- `spring.datasource.url`
-- `spring.datasource.username`
-- `spring.datasource.password`
+- `server.port=${SERVER_PORT:10000}`
+- `spring.threads.virtual.enabled=true`
+- `movie.polling.fixed-rate-ms=60000`
 - `firebase.service-account-file=serviceAccountKey.json`
-- `movie.polling.fixed-rate-ms=60000` (default: 60s)
+- `spring.datasource.url=${SPRING_DATASOURCE_URL:...}`
+- `spring.datasource.username=${SPRING_DATASOURCE_USERNAME:kodi}`
+- `spring.datasource.password=${SPRING_DATASOURCE_PASSWORD:kodi}`
 
-`DataSourceConfig` builds Hikari using `org.mariadb.jdbc.MariaDbDataSource` and passes URL/user/password as datasource properties.
+Environment variables take precedence over defaults because properties use `${ENV_VAR:default}` syntax.
 
-Polling dedupe is DB-backed: `MoviePollingService` checks/persists in `notified_movies` before sending, so restarts do not resend already-notified movies.
+## Build and Run (Java 25)
 
-## Native Notes
+### JVM
 
-### Toolchain behavior
+```bash
+cd /path/to/movie-notifier
+./gradlew clean test
+./gradlew bootRun
+```
 
-`build.gradle` uses:
+### Native AMD64
 
-- Spring Boot `4.0.4`
-- Graal plugin `0.11.1`
-- Java toolchain source/target 25
-- Native launcher lookup for GraalVM Java 25
+```bash
+cd /path/to/movie-notifier
+./build-native.sh
+./build/native/nativeCompile/movie-notifier-native
+```
 
-Java 21 is not supported by this repository configuration anymore.
+### Native ARM64 (cross-build with Docker Buildx)
 
-If native compile fails with toolchain lookup errors, use `./build-native.sh` and verify GraalVM path in the script.
+```bash
+cd /path/to/movie-notifier
+./build-native.sh aarch64
+file build/native/nativeCompile/movie-notifier-native
+```
 
-### Reflection metadata
+Notes:
 
-Hibernate 7 on native may require explicit reflection entries. This project keeps them in:
+- Use `./build-native.sh` (not a Gradle task name).
+- Runtime files are copied to `build/native/nativeCompile`:
+  - `application.properties`
+  - `serviceAccountKey.json` (if present)
+- Native image build threads are currently configured in `build.gradle`:
+  - `-H:NumberOfThreads=6`
 
-- `src/main/resources/META-INF/native-image/com.example/movie-notifier/reflect-config.json`
+## Portainer (run the native image)
 
-Recent required entries include:
+If you export/publish your image and deploy with Portainer, run the container with port mapping `10000:10000` and provide required env vars (or mount config/secret files):
 
-- `org.hibernate.event.spi.PreFlushEventListener[]`
-- `org.hibernate.event.spi.PostFlushEventListener[]`
-
-If you get `MissingReflectionRegistrationError` for another type, add that exact type in `reflect-config.json`, rebuild, and rerun.
+- `SERVER_PORT=10000` (optional, default already 10000)
+- `SPRING_DATASOURCE_URL`
+- `SPRING_DATASOURCE_USERNAME`
+- `SPRING_DATASOURCE_PASSWORD`
+- Firebase service account file available in container path expected by `firebase.service-account-file`
 
 ## Troubleshooting
 
-- `Task 'runBoot' not found`:
+- `Task 'runBoot' not found`
   - Use `./gradlew bootRun`.
-- `./movie-notifier-native: No such file or directory`:
-  - Build did not finish successfully. Re-run `./build-native.sh` and verify binary exists in `build/native/nativeCompile`.
-- Native app starts but DB auth fails:
-  - Check values in `application.properties` and that runtime config file is copied into native output directory.
-- Native build fails with SLF4J image heap/provider errors:
-  - Re-check native build args in `build.gradle` and use the project defaults.
+- Native binary missing after build
+  - Re-run `./build-native.sh` and verify `build/native/nativeCompile/movie-notifier-native`.
+- FCM send returns recipient/token errors
+  - Verify client token, Firebase project credentials, and that token belongs to the same sender/project.
+- Duplicate push after restart
+  - Verify `notified_movies` table persists and `spring.jpa.hibernate.ddl-auto` is not dropping schema.
 
 ## Security Reminder
 
-Do not commit real production secrets.
-
-- `serviceAccountKey.json` should stay private.
-- Consider moving DB credentials to environment variables or external config for production.
+- Do not commit production secrets.
+- Keep `serviceAccountKey.json` private.
+- Prefer environment-based DB credentials in production.
