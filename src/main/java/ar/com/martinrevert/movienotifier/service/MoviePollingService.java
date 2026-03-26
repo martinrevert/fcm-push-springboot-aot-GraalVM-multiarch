@@ -75,6 +75,7 @@ public class MoviePollingService {
                         MovieDetailsResponse.Movie details = fetchMovieDetails(movie.getId());
                         notificationService.sendMovieNotification(
                             movieTitle,
+                            movie.getId(),
                             resolvePosterUrl(movie),
                             details != null ? details.getGenres() : null,
                             details != null ? details.getLanguage() : null,

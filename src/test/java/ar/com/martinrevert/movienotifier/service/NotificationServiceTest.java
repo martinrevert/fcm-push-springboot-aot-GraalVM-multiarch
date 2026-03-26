@@ -117,6 +117,7 @@ class NotificationServiceTest {
 
         notificationService.sendMovieNotification(
             "Movie",
+            12345,
             "https://img.example/poster.jpg",
             List.of("Action", "Drama"),
             "Spanish",
@@ -129,6 +130,7 @@ class NotificationServiceTest {
         assertEquals("valid-token", extractToken(sentMessage));
         Map<String, String> data = extractData(sentMessage);
         assertEquals("Movie", data.get("title"));
+        assertEquals("12345", data.get("id"));
         assertEquals("Genres: Action, Drama | Language: Spanish | Rating: 8.7", data.get("body"));
         assertEquals("https://img.example/poster.jpg", data.get("posterUrl"));
         assertEquals("Action, Drama", data.get("genres"));

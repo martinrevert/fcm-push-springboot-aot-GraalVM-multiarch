@@ -54,8 +54,8 @@ class MoviePollingServicePersistenceTest {
 
         InOrder inOrder = inOrder(notifiedMovieRepository, notificationService);
         inOrder.verify(notifiedMovieRepository).saveAndFlush(any(NotifiedMovie.class));
-        inOrder.verify(notificationService).sendMovieNotification(eq("Test Movie"), isNull(), isNull(), isNull(), isNull());
-        verify(notificationService).sendMovieNotification(eq("Test Movie"), isNull(), isNull(), isNull(), isNull());
+        inOrder.verify(notificationService).sendMovieNotification(eq("Test Movie"), eq(12345), isNull(), isNull(), isNull(), isNull());
+        verify(notificationService).sendMovieNotification(eq("Test Movie"), eq(12345), isNull(), isNull(), isNull(), isNull());
         verify(notifiedMovieRepository).saveAndFlush(any(NotifiedMovie.class));
     }
 
@@ -68,7 +68,7 @@ class MoviePollingServicePersistenceTest {
 
         moviePollingService.pollMovies();
 
-        verify(notificationService, never()).sendMovieNotification(anyString());
+        verify(notificationService, never()).sendMovieNotification(anyString(), any(), any(), any(), any(), any());
         verify(notifiedMovieRepository, never()).saveAndFlush(any(NotifiedMovie.class));
     }
 
@@ -83,7 +83,7 @@ class MoviePollingServicePersistenceTest {
 
         moviePollingService.pollMovies();
 
-        verify(notificationService, never()).sendMovieNotification(anyString());
+        verify(notificationService, never()).sendMovieNotification(anyString(), any(), any(), any(), any(), any());
     }
 
     private MovieResponse createResponseWithMovie(int id, String title) {

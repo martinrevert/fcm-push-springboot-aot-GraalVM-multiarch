@@ -47,20 +47,22 @@ public class NotificationService {
      * @param title movie title to include in the push payload
      */
     public void sendMovieNotification(String title) {
-        sendMovieNotification(title, null, null, null, null);
+        sendMovieNotification(title, null, null, null, null, null);
     }
 
     /**
      * Sends a movie notification with enriched metadata.
      *
      * @param title movie title
+     * @param movieId movie id
      * @param posterUrl poster image URL
      * @param genres movie genres
      * @param language movie language
      * @param rating movie rating
      */
-    public void sendMovieNotification(String title, String posterUrl, List<String> genres, String language, Double rating) {
+    public void sendMovieNotification(String title, Integer movieId, String posterUrl, List<String> genres, String language, Double rating) {
         String resolvedTitle = normalizeTitle(title);
+        String resolvedMovieId = normalizeMovieId(movieId);
         String resolvedPosterUrl = normalizePosterUrl(posterUrl);
         String resolvedGenres = normalizeGenres(genres);
         String resolvedLanguage = normalizeLanguage(language);
@@ -87,6 +89,7 @@ public class NotificationService {
 
             Message message = buildMessage(
                 resolvedTitle,
+                resolvedMovieId,
                 resolvedBody,
                 resolvedPosterUrl,
                 resolvedGenres,
@@ -112,6 +115,7 @@ public class NotificationService {
      * Builds a platform-aware FCM message with notification and data payloads.
      *
      * @param title push notification title
+     * @param movieId movie id
      * @param body push notification body
      * @param posterUrl poster image URL
      * @param genres normalized genres text
@@ -120,7 +124,7 @@ public class NotificationService {
      * @param token destination FCM registration token
      * @return fully built Firebase message
      */
-    private Message buildMessage(String title, String body, String posterUrl, String genres, String language, String rating, String token) {
+    private Message buildMessage(String title, String movieId, String body, String posterUrl, String genres, String language, String rating, String token) {
         Notification.Builder notificationBuilder = Notification.builder()
                 .setTitle(title)
                 .setBody(body);
@@ -138,6 +142,7 @@ public class NotificationService {
                 .setToken(token)
                 .setNotification(notificationBuilder.build())
                 .putData("title", title)
+                .putData("id", movieId)
                 .putData("body", body)
                 .putData("posterUrl", defaultString(posterUrl))
                 .putData("genres", genres)
@@ -172,6 +177,16 @@ public class NotificationService {
             return "New movie";
         }
         return title;
+    }
+
+    /**
+     * Normalizes movie id into a string-safe payload value.
+     *
+     * @param movieId movie id candidate
+     * @return normalized movie id text
+     */
+    private String normalizeMovieId(Integer movieId) {
+        return movieId == null ? "" : movieId.toString();
     }
 
     /**
