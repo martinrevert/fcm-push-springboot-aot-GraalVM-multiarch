@@ -44,7 +44,7 @@ class NotificationServiceTest {
     void sendMovieNotificationSkipsWhenNoSubscriptions() throws Exception {
         when(subscriptionService.getAllSubscriptions()).thenReturn(List.of());
 
-        notificationService.sendMovieNotification("Movie");
+        notificationService.sendMovieNotification("Movie", null, null, null, null, null);
 
         verify(firebaseMessaging, never()).send(any());
     }
@@ -58,7 +58,7 @@ class NotificationServiceTest {
         when(exception.getMessagingErrorCode()).thenReturn(MessagingErrorCode.UNREGISTERED);
         when(firebaseMessaging.send(any())).thenThrow(exception);
 
-        notificationService.sendMovieNotification("Movie");
+        notificationService.sendMovieNotification("Movie", null, null, null, null, null);
 
         verify(subscriptionService).unsubscribe("dead-token");
     }
@@ -72,7 +72,7 @@ class NotificationServiceTest {
         when(exception.getMessagingErrorCode()).thenReturn(MessagingErrorCode.UNAVAILABLE);
         when(firebaseMessaging.send(any())).thenThrow(exception);
 
-        notificationService.sendMovieNotification("Movie");
+        notificationService.sendMovieNotification("Movie", null, null, null, null, null);
 
         verify(subscriptionService, never()).unsubscribe("temporary-token");
     }
@@ -87,7 +87,7 @@ class NotificationServiceTest {
         when(exception.getMessage()).thenReturn("The registration token is not a valid FCM registration token");
         when(firebaseMessaging.send(any())).thenThrow(exception);
 
-        notificationService.sendMovieNotification("Movie");
+        notificationService.sendMovieNotification("Movie", null, null, null, null, null);
 
         verify(subscriptionService).unsubscribe("broken-token");
     }
@@ -104,7 +104,7 @@ class NotificationServiceTest {
         when(subscriptionService.getAllSubscriptions()).thenReturn(List.of(blank, nullToken, valid));
         when(firebaseMessaging.send(any())).thenReturn("ok");
 
-        notificationService.sendMovieNotification("Movie");
+        notificationService.sendMovieNotification("Movie", null, null, null, null, null);
 
         verify(firebaseMessaging, times(1)).send(any());
     }
@@ -120,7 +120,7 @@ class NotificationServiceTest {
             12345,
             "https://img.example/poster.jpg",
             List.of("Action", "Drama"),
-            "Spanish",
+            "Argentina",
             8.7
         );
 
@@ -130,16 +130,16 @@ class NotificationServiceTest {
         assertEquals("valid-token", extractToken(sentMessage));
         Map<String, String> data = extractData(sentMessage);
         assertEquals("Movie", data.get("title"));
+        assertEquals("Genres: Action, Drama | Country: Argentina | Rating: 8.7", data.get("body"));
         assertEquals("12345", data.get("id"));
-        assertEquals("Genres: Action, Drama | Language: Spanish | Rating: 8.7", data.get("body"));
         assertEquals("https://img.example/poster.jpg", data.get("posterUrl"));
         assertEquals("Action, Drama", data.get("genres"));
-        assertEquals("Spanish", data.get("language"));
+        assertEquals("Argentina", data.get("country"));
         assertEquals("8.7", data.get("rating"));
 
         Object notification = extractNotification(sentMessage);
         assertEquals("Movie", extractStringField(notification, "title"));
-        assertEquals("Genres: Action, Drama | Language: Spanish | Rating: 8.7", extractStringField(notification, "body"));
+        assertEquals("Genres: Action, Drama | Country: Argentina | Rating: 8.7", extractStringField(notification, "body"));
         assertEquals("https://img.example/poster.jpg", extractStringField(notification, "image"));
     }
 

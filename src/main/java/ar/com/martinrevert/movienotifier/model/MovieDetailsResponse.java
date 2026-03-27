@@ -56,8 +56,9 @@ public class MovieDetailsResponse {
 
         private List<String> genres;
 
-        @JsonProperty("language")
         private String language;
+
+        private String country;
 
         @JsonProperty("rating")
         private Double rating;
@@ -96,6 +97,24 @@ public class MovieDetailsResponse {
          */
         public void setLanguage(String language) {
             this.language = language;
+        }
+
+        /**
+         * Gets movie country.
+         *
+         * @return country value
+         */
+        public String getCountry() {
+            return country;
+        }
+
+        /**
+         * Sets movie country.
+         *
+         * @param country country value
+         */
+        public void setCountry(String country) {
+            this.country = country;
         }
 
         /**

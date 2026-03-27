@@ -16,6 +16,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 public class MoviePollingService {
 
     private static final Logger logger = LoggerFactory.getLogger(MoviePollingService.class);
+    private static final String REQUIRED_LANGUAGE = "en";
+    private static final double MIN_RATING = 6.0;
 
     private final RestClient restClient;
     private final NotificationService notificationService;
@@ -70,20 +72,35 @@ public class MoviePollingService {
                 );
                 int newMoviesCount = 0;
                 for (MovieResponse.Movie movie : response.getData().getMovies()) {
-                    if (tryMarkMovieAsNotified(movie)) {
-                        String movieTitle = resolveMovieTitle(movie);
-                        MovieDetailsResponse.Movie details = fetchMovieDetails(movie.getId());
-                        notificationService.sendMovieNotification(
+                    String movieTitle = resolveMovieTitle(movie);
+
+                    // Persist every unseen movie id so we do not re-evaluate it on later polls.
+                    if (!tryMarkMovieAsNotified(movie)) {
+                        continue;
+                    }
+
+                    MovieDetailsResponse.Movie details = fetchMovieDetails(movie.getId());
+                    if (!isEligibleForNotification(details)) {
+                        logger.info(
+                            "Skipping movie '{}' (ID: {}) because it does not match notification filters. language='{}' rating={}",
                             movieTitle,
                             movie.getId(),
-                            resolvePosterUrl(movie),
-                            details != null ? details.getGenres() : null,
                             details != null ? details.getLanguage() : null,
                             details != null ? details.getRating() : null
                         );
-                        logger.info("Found new movie: {} (ID: {})", movieTitle, movie.getId());
-                        newMoviesCount++;
+                        continue;
                     }
+
+                    notificationService.sendMovieNotification(
+                        movieTitle,
+                        movie.getId(),
+                        resolvePosterUrl(movie),
+                        details.getGenres(),
+                        details.getLanguage(),
+                        details.getRating()
+                    );
+                    logger.info("Found new eligible movie: {} (ID: {})", movieTitle, movie.getId());
+                    newMoviesCount++;
                 }
                 if (newMoviesCount == 0) {
                     logger.info("No new movies found.");
@@ -174,6 +191,21 @@ public class MoviePollingService {
             logger.warn("Could not fetch movie details for id={}. Sending basic payload.", movieId);
             return null;
         }
+    }
+
+    /**
+     * Determines whether a movie can be notified based on language and rating.
+     *
+     * @param details movie details payload
+     * @return true when language is English and rating is at least 6.0
+     */
+    private boolean isEligibleForNotification(MovieDetailsResponse.Movie details) {
+        if (details == null || details.getLanguage() == null || details.getRating() == null) {
+            return false;
+        }
+
+        return REQUIRED_LANGUAGE.equalsIgnoreCase(details.getLanguage().trim())
+            && details.getRating() >= MIN_RATING;
     }
 }
 

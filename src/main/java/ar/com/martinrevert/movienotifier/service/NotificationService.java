@@ -44,30 +44,21 @@ public class NotificationService {
      * Sends a movie notification to every currently subscribed token.
      * Invalid tokens are removed when Firebase reports terminal token errors.
      *
-     * @param title movie title to include in the push payload
-     */
-    public void sendMovieNotification(String title) {
-        sendMovieNotification(title, null, null, null, null, null);
-    }
-
-    /**
-     * Sends a movie notification with enriched metadata.
-     *
      * @param title movie title
-     * @param movieId movie id
+     * @param movieId movie identifier
      * @param posterUrl poster image URL
      * @param genres movie genres
-     * @param language movie language
+     * @param country movie country
      * @param rating movie rating
      */
-    public void sendMovieNotification(String title, Integer movieId, String posterUrl, List<String> genres, String language, Double rating) {
+    public void sendMovieNotification(String title, Integer movieId, String posterUrl, List<String> genres, String country, Double rating) {
         String resolvedTitle = normalizeTitle(title);
         String resolvedMovieId = normalizeMovieId(movieId);
         String resolvedPosterUrl = normalizePosterUrl(posterUrl);
         String resolvedGenres = normalizeGenres(genres);
-        String resolvedLanguage = normalizeLanguage(language);
+        String resolvedCountry = normalizeCountry(country);
         String resolvedRating = normalizeRating(rating);
-        String resolvedBody = buildNotificationBody(resolvedGenres, resolvedLanguage, resolvedRating);
+        String resolvedBody = buildNotificationBody(resolvedGenres, resolvedCountry, resolvedRating);
 
         List<Subscription> subscriptions = subscriptionService.getAllSubscriptions();
         if (subscriptions.isEmpty()) {
@@ -89,11 +80,11 @@ public class NotificationService {
 
             Message message = buildMessage(
                 resolvedTitle,
-                resolvedMovieId,
                 resolvedBody,
+                resolvedMovieId,
                 resolvedPosterUrl,
                 resolvedGenres,
-                resolvedLanguage,
+                resolvedCountry,
                 resolvedRating,
                 token
             );
@@ -115,16 +106,15 @@ public class NotificationService {
      * Builds a platform-aware FCM message with notification and data payloads.
      *
      * @param title push notification title
-     * @param movieId movie id
      * @param body push notification body
      * @param posterUrl poster image URL
      * @param genres normalized genres text
-     * @param language normalized language text
+     * @param country normalized country text
      * @param rating normalized rating text
      * @param token destination FCM registration token
      * @return fully built Firebase message
      */
-    private Message buildMessage(String title, String movieId, String body, String posterUrl, String genres, String language, String rating, String token) {
+    private Message buildMessage(String title, String body, String movieId, String posterUrl, String genres, String country, String rating, String token) {
         Notification.Builder notificationBuilder = Notification.builder()
                 .setTitle(title)
                 .setBody(body);
@@ -142,11 +132,11 @@ public class NotificationService {
                 .setToken(token)
                 .setNotification(notificationBuilder.build())
                 .putData("title", title)
-                .putData("id", movieId)
                 .putData("body", body)
+                .putData("id", movieId)
                 .putData("posterUrl", defaultString(posterUrl))
                 .putData("genres", genres)
-                .putData("language", language)
+                .putData("country", country)
                 .putData("rating", rating)
                 .setAndroidConfig(AndroidConfig.builder()
                         .setPriority(AndroidConfig.Priority.HIGH)
@@ -180,25 +170,25 @@ public class NotificationService {
     }
 
     /**
-     * Normalizes movie id into a string-safe payload value.
-     *
-     * @param movieId movie id candidate
-     * @return normalized movie id text
-     */
-    private String normalizeMovieId(Integer movieId) {
-        return movieId == null ? "" : movieId.toString();
-    }
-
-    /**
      * Builds the notification body text displayed to the user.
      *
      * @param genres normalized genres text
-     * @param language normalized language text
+     * @param country normalized country text
      * @param rating normalized rating text
      * @return notification body text
      */
-    private String buildNotificationBody(String genres, String language, String rating) {
-        return "Genres: " + genres + " | Language: " + language + " | Rating: " + rating;
+    private String buildNotificationBody(String genres, String country, String rating) {
+        return "Genres: " + genres + " | Country: " + country + " | Rating: " + rating;
+    }
+
+    /**
+     * Normalizes movie id value.
+     *
+     * @param movieId movie identifier
+     * @return normalized id text
+     */
+    private String normalizeMovieId(Integer movieId) {
+        return movieId == null ? "" : String.valueOf(movieId);
     }
 
     /**
@@ -231,16 +221,16 @@ public class NotificationService {
     }
 
     /**
-     * Normalizes language string.
+     * Normalizes country string.
      *
-     * @param language language candidate
-     * @return normalized language
+     * @param country country candidate
+     * @return normalized country
      */
-    private String normalizeLanguage(String language) {
-        if (language == null || language.isBlank()) {
+    private String normalizeCountry(String country) {
+        if (country == null || country.isBlank()) {
             return "Unknown";
         }
-        return language;
+        return country;
     }
 
     /**

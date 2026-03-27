@@ -1,5 +1,6 @@
 package ar.com.martinrevert.movienotifier.service;
 
+import ar.com.martinrevert.movienotifier.model.MovieDetailsResponse;
 import ar.com.martinrevert.movienotifier.model.MovieResponse;
 import ar.com.martinrevert.movienotifier.model.NotifiedMovie;
 import ar.com.martinrevert.movienotifier.repository.NotifiedMovieRepository;
@@ -46,16 +47,19 @@ class MoviePollingServicePersistenceTest {
     @Test
     void pollMoviesSavesMovieAndSendsNotificationForUnseenMovie() {
         MovieResponse response = createResponseWithMovie(12345, "Test Movie");
+        MovieDetailsResponse detailsResponse = createDetailsResponse("en", 7.1);
 
         when(restClient.get().uri(anyString()).retrieve().body(eq(MovieResponse.class))).thenReturn(response);
+        when(restClient.get().uri(eq("https://yts.bz/api/v2/movie_details.json?movie_id={movieId}"), eq(12345))
+            .retrieve().body(eq(MovieDetailsResponse.class))).thenReturn(detailsResponse);
         when(notifiedMovieRepository.existsById(12345)).thenReturn(false);
 
         moviePollingService.pollMovies();
 
         InOrder inOrder = inOrder(notifiedMovieRepository, notificationService);
         inOrder.verify(notifiedMovieRepository).saveAndFlush(any(NotifiedMovie.class));
-        inOrder.verify(notificationService).sendMovieNotification(eq("Test Movie"), eq(12345), isNull(), isNull(), isNull(), isNull());
-        verify(notificationService).sendMovieNotification(eq("Test Movie"), eq(12345), isNull(), isNull(), isNull(), isNull());
+        inOrder.verify(notificationService).sendMovieNotification(eq("Test Movie"), eq(12345), isNull(), isNull(), eq("en"), eq(7.1));
+        verify(notificationService).sendMovieNotification(eq("Test Movie"), eq(12345), isNull(), isNull(), eq("en"), eq(7.1));
         verify(notifiedMovieRepository).saveAndFlush(any(NotifiedMovie.class));
     }
 
@@ -86,6 +90,36 @@ class MoviePollingServicePersistenceTest {
         verify(notificationService, never()).sendMovieNotification(anyString(), any(), any(), any(), any(), any());
     }
 
+    @Test
+    void pollMoviesSkipsNotificationWhenMovieLanguageIsNotEnglish() {
+        MovieResponse response = createResponseWithMovie(12345, "Test Movie");
+        MovieDetailsResponse detailsResponse = createDetailsResponse("es", 8.0);
+
+        when(restClient.get().uri(anyString()).retrieve().body(eq(MovieResponse.class))).thenReturn(response);
+        when(restClient.get().uri(eq("https://yts.bz/api/v2/movie_details.json?movie_id={movieId}"), eq(12345))
+            .retrieve().body(eq(MovieDetailsResponse.class))).thenReturn(detailsResponse);
+
+        moviePollingService.pollMovies();
+
+        verify(notificationService, never()).sendMovieNotification(anyString(), any(), any(), any(), any(), any());
+        verify(notifiedMovieRepository).saveAndFlush(any(NotifiedMovie.class));
+    }
+
+    @Test
+    void pollMoviesSkipsNotificationWhenMovieRatingIsBelowMinimum() {
+        MovieResponse response = createResponseWithMovie(12345, "Test Movie");
+        MovieDetailsResponse detailsResponse = createDetailsResponse("en", 5.9);
+
+        when(restClient.get().uri(anyString()).retrieve().body(eq(MovieResponse.class))).thenReturn(response);
+        when(restClient.get().uri(eq("https://yts.bz/api/v2/movie_details.json?movie_id={movieId}"), eq(12345))
+            .retrieve().body(eq(MovieDetailsResponse.class))).thenReturn(detailsResponse);
+
+        moviePollingService.pollMovies();
+
+        verify(notificationService, never()).sendMovieNotification(anyString(), any(), any(), any(), any(), any());
+        verify(notifiedMovieRepository).saveAndFlush(any(NotifiedMovie.class));
+    }
+
     private MovieResponse createResponseWithMovie(int id, String title) {
         MovieResponse.Movie movie = new MovieResponse.Movie();
         movie.setId(id);
@@ -100,6 +134,19 @@ class MoviePollingServicePersistenceTest {
         response.setStatusMessage("Query was successful");
         response.setData(data);
 
+        return response;
+    }
+
+    private MovieDetailsResponse createDetailsResponse(String language, Double rating) {
+        MovieDetailsResponse.Movie movie = new MovieDetailsResponse.Movie();
+        movie.setLanguage(language);
+        movie.setRating(rating);
+
+        MovieDetailsResponse.Data data = new MovieDetailsResponse.Data();
+        data.setMovie(movie);
+
+        MovieDetailsResponse response = new MovieDetailsResponse();
+        response.setData(data);
         return response;
     }
 }
