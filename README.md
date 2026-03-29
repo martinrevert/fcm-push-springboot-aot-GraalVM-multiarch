@@ -200,7 +200,7 @@ Main file: `src/main/resources/application.properties`
 - `server.port=${SERVER_PORT:10000}`
 - `spring.threads.virtual.enabled=true`
 - `movie.polling.fixed-rate-ms=60000`
-- `firebase.service-account-file=serviceAccountKey.json`
+- `firebase.service-account-file=${FIREBASE_SERVICE_ACCOUNT_FILE:${GOOGLE_APPLICATION_CREDENTIALS:serviceAccountKey.json}}`
 - `spring.datasource.url=${SPRING_DATASOURCE_URL:...}`
 - `spring.datasource.username=${SPRING_DATASOURCE_USERNAME:kodi}`
 - `spring.datasource.password=${SPRING_DATASOURCE_PASSWORD:kodi}`
@@ -231,6 +231,47 @@ cd /path/to/movie-notifier
 cd /path/to/movie-notifier
 ./build-native.sh aarch64
 file build/native/nativeCompile/movie-notifier-native
+docker load -i build/native/docker/movie-notifier-native-latest-arm64.tar
+```
+
+The ARM64 flow now exports two artifacts in one run:
+
+- Native binary: `build/native/nativeCompile/movie-notifier-native`
+- Docker image archive (ready to import/push): `build/native/docker/movie-notifier-native-latest-arm64.tar`
+
+Default image tag inside archive:
+
+- `movie-notifier-native:latest-arm64`
+
+Optional overrides:
+
+- `IMAGE_REPO` (example: `your-dockerhub-user/movie-notifier`)
+- `IMAGE_TAG` (example: `v1.0.0`)
+- `IMAGE_TAR_PATH` (custom archive output path)
+- `ARM64_MARCH` (default `compatibility`, broadest ARM runtime compatibility)
+- `ARM64_NO_CACHE` (`true`/`1` to force fresh Docker Buildx rebuild)
+
+Example for Docker Hub:
+
+```bash
+cd /path/to/movie-notifier
+IMAGE_REPO=your-dockerhub-user/movie-notifier IMAGE_TAG=v1.0.0 ./build-native.sh aarch64
+docker load -i build/native/docker/movie-notifier-native-v1.0.0-arm64.tar
+docker push your-dockerhub-user/movie-notifier:v1.0.0-arm64
+```
+
+Example with explicit Raspberry Pi 4 baseline:
+
+```bash
+cd /path/to/movie-notifier
+ARM64_MARCH=compatibility ./build-native.sh aarch64
+```
+
+Example forcing a fresh ARM64 rebuild (avoid stale layers/artifacts):
+
+```bash
+cd /path/to/movie-notifier
+./build-native.sh aarch64 --no-cache
 ```
 
 Notes:
@@ -239,6 +280,8 @@ Notes:
 - Runtime files are copied to `build/native/nativeCompile`:
   - `application.properties`
   - `serviceAccountKey.json` (if present)
+- ARM64 docker archive always contains native binary and `application.properties`.
+- `serviceAccountKey.json` is optional in the image (and commonly excluded by `.dockerignore`); mount it at runtime and set `FIREBASE_SERVICE_ACCOUNT_FILE` (or `GOOGLE_APPLICATION_CREDENTIALS`) when needed.
 - Native image build threads are currently configured in `build.gradle`:
   - `-H:NumberOfThreads=6`
 
@@ -250,7 +293,8 @@ If you export/publish your image and deploy with Portainer, run the container wi
 - `SPRING_DATASOURCE_URL`
 - `SPRING_DATASOURCE_USERNAME`
 - `SPRING_DATASOURCE_PASSWORD`
-- Firebase service account file available in container path expected by `firebase.service-account-file`
+- Mount Firebase credentials and set path, for example:
+  - `FIREBASE_SERVICE_ACCOUNT_FILE=/run/secrets/serviceAccountKey.json`
 
 ## Troubleshooting
 
@@ -258,6 +302,10 @@ If you export/publish your image and deploy with Portainer, run the container wi
   - Use `./gradlew bootRun`.
 - Native binary missing after build
   - Re-run `./build-native.sh` and verify `build/native/nativeCompile/movie-notifier-native`.
+- Raspberry Pi 4 exits with `required CPU features ... [FP, ASIMD, CRC32, LSE]`
+  - Rebuild ARM64 with a conservative ISA baseline:
+    - `ARM64_MARCH=compatibility ./build-native.sh aarch64`
+  - If needed, verify what was used in the build logs (`Native image CPU baseline used: -march=...`).
 - FCM send returns recipient/token errors
   - Verify client token, Firebase project credentials, and that token belongs to the same sender/project.
 - Duplicate push after restart

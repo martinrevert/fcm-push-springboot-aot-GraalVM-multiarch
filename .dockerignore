@@ -1,0 +1,17 @@
+# VCS and IDE
+.git
+.gitignore
+.idea/
+
+# Build outputs
+build/
+bin/
+.gradle/
+
+# Local env files and logs
+*.log
+
+# Avoid baking local Firebase credentials into build context
+serviceAccountKey.json
+src/main/resources/serviceAccountKey.json
+

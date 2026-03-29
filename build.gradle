@@ -5,6 +5,8 @@ plugins {
     id 'org.graalvm.buildtools.native' version '0.11.1'
 }
 
+import java.util.Locale
+
 group = 'ar.com.martinrevert'
 version = '0.0.1-SNAPSHOT'
 
@@ -51,6 +53,14 @@ graalvmNative {
     
     binaries {
         main {
+            def nativeTargetArch = providers.gradleProperty('nativeTargetArch')
+                .orElse(System.getenv('NATIVE_TARGET_ARCH') ?: System.getProperty('os.arch'))
+                .get()
+                .toLowerCase(Locale.ROOT)
+            def nativeArmMarch = providers.gradleProperty('nativeArmMarch')
+                .orElse(System.getenv('NATIVE_ARM_MARCH') ?: 'compatibility')
+                .get()
+
             imageName = 'movie-notifier-native'
             javaLauncher = javaToolchains.launcherFor {
                 languageVersion = JavaLanguageVersion.of(25)
@@ -63,6 +73,10 @@ graalvmNative {
                 '-H:IncludeResources=admin_sdk\\.properties',
                 '-H:NumberOfThreads=6'
             ])
+            if (nativeTargetArch.contains('aarch64') || nativeTargetArch.contains('arm64')) {
+                // Build an ARM64 binary that runs on Raspberry Pi 4 (avoid requiring newer extensions like LSE).
+                buildArgs.add("-march=${nativeArmMarch}")
+            }
         }
     }
 }
