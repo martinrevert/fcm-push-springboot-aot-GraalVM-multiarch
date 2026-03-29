@@ -280,8 +280,8 @@ Notes:
 - Runtime files are copied to `build/native/nativeCompile`:
   - `application.properties`
   - `serviceAccountKey.json` (if present)
-- ARM64 docker archive always contains native binary and `application.properties`.
-- `serviceAccountKey.json` is optional in the image (and commonly excluded by `.dockerignore`); mount it at runtime and set `FIREBASE_SERVICE_ACCOUNT_FILE` (or `GOOGLE_APPLICATION_CREDENTIALS`) when needed.
+- ARM64 docker archive contains native binary, `application.properties`, and `serviceAccountKey.json` from project root.
+- To use a mounted secret instead, set `FIREBASE_SERVICE_ACCOUNT_FILE` (or `GOOGLE_APPLICATION_CREDENTIALS`) to that mounted path.
 - Native image build threads are currently configured in `build.gradle`:
   - `-H:NumberOfThreads=6`
 
@@ -293,8 +293,7 @@ If you export/publish your image and deploy with Portainer, run the container wi
 - `SPRING_DATASOURCE_URL`
 - `SPRING_DATASOURCE_USERNAME`
 - `SPRING_DATASOURCE_PASSWORD`
-- Mount Firebase credentials and set path, for example:
-  - `FIREBASE_SERVICE_ACCOUNT_FILE=/run/secrets/serviceAccountKey.json`
+- Firebase service account file available in container path expected by `firebase.service-account-file`
 
 ## Troubleshooting
 

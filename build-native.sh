@@ -47,18 +47,14 @@ RUN export JAVA_HOME="\$(dirname "\$(dirname "\$(readlink -f "\$(command -v java
       -Dorg.gradle.java.installations.paths="\$JAVA_HOME" \
       -Dorg.gradle.java.installations.auto-download=false
 
-# Prepare runtime assets. Firebase key is optional and can be mounted at runtime.
-RUN mkdir -p /app/runtime-assets && \
-    cp /app/src/main/resources/application.properties /app/runtime-assets/application.properties && \
-    if [ -f /app/serviceAccountKey.json ]; then cp /app/serviceAccountKey.json /app/runtime-assets/serviceAccountKey.json; fi
-
 FROM scratch AS binary-export
 COPY --from=builder /app/build/native/nativeCompile/movie-notifier-native /
 
 FROM debian:bookworm-slim AS runtime
 WORKDIR /opt/movie-notifier
 COPY --from=builder /app/build/native/nativeCompile/movie-notifier-native ./movie-notifier-native
-COPY --from=builder /app/runtime-assets/ ./
+COPY --from=builder /app/src/main/resources/application.properties ./application.properties
+COPY --from=builder /app/serviceAccountKey.json ./serviceAccountKey.json
 RUN chmod +x /opt/movie-notifier/movie-notifier-native
 EXPOSE 10000
 ENTRYPOINT ["/opt/movie-notifier/movie-notifier-native"]
