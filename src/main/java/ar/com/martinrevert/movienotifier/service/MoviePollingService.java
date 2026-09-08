@@ -24,41 +24,48 @@ public class MoviePollingService {
     private final NotificationService notificationService;
     private final NotifiedMovieRepository notifiedMovieRepository;
     private final double minRating;
+    private final String apiBaseUrl;
 
     /**
-     * Creates the polling service with a configurable minimum rating threshold.
+     * Creates the polling service with a configurable minimum rating threshold and API base URL.
      *
      * @param notificationService service used to send push notifications
-     * @param restClient HTTP client used to call YTS
+     * @param restClient HTTP client used to call the movies API
      * @param notifiedMovieRepository repository used for deduplication persistence
      * @param minRating minimum IMDb rating required to trigger notifications
+     * @param apiBaseUrl base URL of the movies API (e.g. https://movies-api.accel.li/api/v2/)
      */
     @Autowired
     public MoviePollingService(
         NotificationService notificationService,
         RestClient restClient,
         NotifiedMovieRepository notifiedMovieRepository,
-        @Value("${movie.polling.min-rating:6.5}") double minRating
+        @Value("${movie.polling.min-rating:6.5}") double minRating,
+        @Value("${movie.api.base-url}") String apiBaseUrl
     ) {
         this.restClient = restClient;
         this.notificationService = notificationService;
         this.notifiedMovieRepository = notifiedMovieRepository;
         this.minRating = minRating;
+        this.apiBaseUrl = apiBaseUrl.endsWith("/") ? apiBaseUrl : apiBaseUrl + "/";
     }
 
     /**
-     * Creates the polling service using the default minimum rating of 6.5.
+     * Creates the polling service using the default minimum rating and a custom API base URL.
+     * Intended for tests that do not need Spring context.
      *
      * @param notificationService service used to send push notifications
-     * @param restClient HTTP client used to call YTS
+     * @param restClient HTTP client used to call the movies API
      * @param notifiedMovieRepository repository used for deduplication persistence
+     * @param apiBaseUrl base URL of the movies API
      */
     public MoviePollingService(
         NotificationService notificationService,
         RestClient restClient,
-        NotifiedMovieRepository notifiedMovieRepository
+        NotifiedMovieRepository notifiedMovieRepository,
+        String apiBaseUrl
     ) {
-        this(notificationService, restClient, notifiedMovieRepository, DEFAULT_MIN_RATING);
+        this(notificationService, restClient, notifiedMovieRepository, DEFAULT_MIN_RATING, apiBaseUrl);
     }
 
     /**
@@ -67,7 +74,7 @@ public class MoviePollingService {
     @Scheduled(fixedRateString = "${movie.polling.fixed-rate-ms:60000}")
     public void pollMovies() {
         logger.info("Polling for new movies...");
-        String url = "https://yts.ag/api/v2/list_movies.json";
+        String url = apiBaseUrl + "list_movies.json";
         try {
             MovieResponse response = restClient
                 .get()
@@ -199,7 +206,7 @@ public class MoviePollingService {
         try {
             MovieDetailsResponse detailsResponse = restClient
                 .get()
-                .uri("https://yts.bz/api/v2/movie_details.json?movie_id={movieId}", movieId)
+                .uri(apiBaseUrl + "movie_details.json?movie_id={movieId}", movieId)
                 .retrieve()
                 .body(MovieDetailsResponse.class);
 

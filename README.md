@@ -40,7 +40,7 @@ High-performance Spring Boot service that polls YTS and dispatches Firebase Clou
 
 ## Overview & Key Features
 
-- **Scheduled Movie Polling**: Regularly checks the YTS API on a configurable fixed-rate interval.
+- **Scheduled Movie Polling**: Regularly checks a configurable movies API on a configurable fixed-rate interval.
 - **Configurable Quality & Language Filters**: Only dispatches notifications for English movies meeting a configurable minimum IMDb rating threshold (default: `6.5`, raised from 6.0).
 - **Duplicate Prevention**: Persists processed movie IDs in a dedicated MariaDB table (`notified_movies`) to prevent duplicate alerts across application restarts.
 - **Idempotent Subscription Management**: Devices subscribe via a single REST endpoint; duplicate registrations are handled idempotently even under high concurrency.
@@ -268,6 +268,7 @@ Open `src/main/resources/application-local.properties` and adjust your database 
 server.port=10000
 firebase.service-account-file=serviceAccountKey.json
 movie.polling.min-rating=6.5
+movie.api.base-url=https://movies-api.accel.li/api/v2/
 spring.datasource.driver-class-name=org.mariadb.jdbc.Driver
 spring.datasource.url=jdbc:mariadb://localhost:3306/subscriptions?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
 spring.datasource.username=your_local_db_user
@@ -300,7 +301,8 @@ The application follows the 12-Factor methodology. All configuration settings ar
 | `SPRING_DATASOURCE_USERNAME` | `spring.datasource.username` | - | Database username |
 | `SPRING_DATASOURCE_PASSWORD` | `spring.datasource.password` | - | Database password |
 | `MOVIE_MIN_RATING` | `movie.polling.min-rating` | `6.5` | Minimum IMDb rating required to notify movies |
-| - | `movie.polling.fixed-rate-ms` | `60000` | YTS polling interval in milliseconds |
+| `MOVIE_API_BASE_URL` | `movie.api.base-url` | `https://movies-api.accel.li/api/v2/` | Base URL of the movies API (trailing slash required) |
+| - | `movie.polling.fixed-rate-ms` | `60000` | Movies API polling interval in milliseconds |
 
 ---
 
@@ -422,6 +424,7 @@ docker run -d \
   -e SPRING_DATASOURCE_USERNAME="your_db_user" \
   -e SPRING_DATASOURCE_PASSWORD="your_db_password" \
   -e MOVIE_MIN_RATING=6.5 \
+  -e MOVIE_API_BASE_URL="https://movies-api.accel.li/api/v2/" \
   -e FIREBASE_SERVICE_ACCOUNT_FILE="/secrets/serviceAccountKey.json" \
   -v /path/to/production/serviceAccountKey.json:/secrets/serviceAccountKey.json:ro \
   your-repo/movie-notifier-native:latest
@@ -445,6 +448,7 @@ services:
       SPRING_DATASOURCE_USERNAME: your_db_user
       SPRING_DATASOURCE_PASSWORD: your_db_password
       MOVIE_MIN_RATING: 6.5
+      MOVIE_API_BASE_URL: https://movies-api.accel.li/api/v2/
       FIREBASE_SERVICE_ACCOUNT_FILE: /secrets/serviceAccountKey.json
     volumes:
       - /path/to/production/serviceAccountKey.json:/secrets/serviceAccountKey.json:ro
@@ -465,6 +469,7 @@ When deploying using the Portainer Web UI:
    - `SPRING_DATASOURCE_USERNAME=your_db_user`
    - `SPRING_DATASOURCE_PASSWORD=your_db_password`
    - `MOVIE_MIN_RATING=6.5` (optional)
+   - `MOVIE_API_BASE_URL=https://movies-api.accel.li/api/v2/` (optional, this is the default)
    - `FIREBASE_SERVICE_ACCOUNT_FILE=/secrets/serviceAccountKey.json`
 4. **Volume Mount**: Bind mount host path `/path/to/serviceAccountKey.json` to container path `/secrets/serviceAccountKey.json` in read-only mode.
 
@@ -499,6 +504,7 @@ If executing the native binary directly on a Linux host (Ubuntu, Debian, Raspber
    Environment=SPRING_DATASOURCE_USERNAME=your_db_user
    Environment=SPRING_DATASOURCE_PASSWORD=your_db_password
    Environment=MOVIE_MIN_RATING=6.5
+   Environment=MOVIE_API_BASE_URL=https://movies-api.accel.li/api/v2/
    Environment=FIREBASE_SERVICE_ACCOUNT_FILE=/opt/movie-notifier/serviceAccountKey.json
    Restart=always
    RestartSec=10

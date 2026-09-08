@@ -41,7 +41,7 @@ class MoviePollingServicePersistenceTest {
 
     @BeforeEach
     void setUp() {
-        moviePollingService = new MoviePollingService(notificationService, restClient, notifiedMovieRepository);
+        moviePollingService = new MoviePollingService(notificationService, restClient, notifiedMovieRepository, "https://movies-api.accel.li/api/v2/");
     }
 
     @Test
@@ -50,7 +50,7 @@ class MoviePollingServicePersistenceTest {
         MovieDetailsResponse detailsResponse = createDetailsResponse("en", 7.1);
 
         when(restClient.get().uri(anyString()).retrieve().body(eq(MovieResponse.class))).thenReturn(response);
-        when(restClient.get().uri(eq("https://yts.bz/api/v2/movie_details.json?movie_id={movieId}"), eq(12345))
+        when(restClient.get().uri(eq("https://movies-api.accel.li/api/v2/movie_details.json?movie_id={movieId}"), eq(12345))
             .retrieve().body(eq(MovieDetailsResponse.class))).thenReturn(detailsResponse);
         when(notifiedMovieRepository.existsById(12345)).thenReturn(false);
 
@@ -96,7 +96,7 @@ class MoviePollingServicePersistenceTest {
         MovieDetailsResponse detailsResponse = createDetailsResponse("es", 8.0);
 
         when(restClient.get().uri(anyString()).retrieve().body(eq(MovieResponse.class))).thenReturn(response);
-        when(restClient.get().uri(eq("https://yts.bz/api/v2/movie_details.json?movie_id={movieId}"), eq(12345))
+        when(restClient.get().uri(eq("https://movies-api.accel.li/api/v2/movie_details.json?movie_id={movieId}"), eq(12345))
             .retrieve().body(eq(MovieDetailsResponse.class))).thenReturn(detailsResponse);
 
         moviePollingService.pollMovies();
@@ -111,7 +111,7 @@ class MoviePollingServicePersistenceTest {
         MovieDetailsResponse detailsResponse = createDetailsResponse("en", 6.4);
 
         when(restClient.get().uri(anyString()).retrieve().body(eq(MovieResponse.class))).thenReturn(response);
-        when(restClient.get().uri(eq("https://yts.bz/api/v2/movie_details.json?movie_id={movieId}"), eq(12345))
+        when(restClient.get().uri(eq("https://movies-api.accel.li/api/v2/movie_details.json?movie_id={movieId}"), eq(12345))
             .retrieve().body(eq(MovieDetailsResponse.class))).thenReturn(detailsResponse);
 
         moviePollingService.pollMovies();
@@ -126,14 +126,15 @@ class MoviePollingServicePersistenceTest {
             notificationService,
             restClient,
             notifiedMovieRepository,
-            7.5
+            7.5,
+            "https://movies-api.accel.li/api/v2/"
         );
 
         MovieResponse response = createResponseWithMovie(12345, "Test Movie");
         MovieDetailsResponse detailsResponse = createDetailsResponse("en", 7.0);
 
         when(restClient.get().uri(anyString()).retrieve().body(eq(MovieResponse.class))).thenReturn(response);
-        when(restClient.get().uri(eq("https://yts.bz/api/v2/movie_details.json?movie_id={movieId}"), eq(12345))
+        when(restClient.get().uri(eq("https://movies-api.accel.li/api/v2/movie_details.json?movie_id={movieId}"), eq(12345))
             .retrieve().body(eq(MovieDetailsResponse.class))).thenReturn(detailsResponse);
         when(notifiedMovieRepository.existsById(12345)).thenReturn(false);
 
