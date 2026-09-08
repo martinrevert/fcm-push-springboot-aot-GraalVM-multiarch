@@ -11,34 +11,54 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 
 @Service
 public class MoviePollingService {
 
     private static final Logger logger = LoggerFactory.getLogger(MoviePollingService.class);
     private static final String REQUIRED_LANGUAGE = "en";
-    private static final double MIN_RATING = 6.0;
+    public static final double DEFAULT_MIN_RATING = 6.5;
 
     private final RestClient restClient;
     private final NotificationService notificationService;
     private final NotifiedMovieRepository notifiedMovieRepository;
+    private final double minRating;
 
     /**
-     * Creates the polling service.
+     * Creates the polling service with a configurable minimum rating threshold.
      *
      * @param notificationService service used to send push notifications
      * @param restClient HTTP client used to call YTS
      * @param notifiedMovieRepository repository used for deduplication persistence
+     * @param minRating minimum IMDb rating required to trigger notifications
      */
     @Autowired
     public MoviePollingService(
         NotificationService notificationService,
         RestClient restClient,
-        NotifiedMovieRepository notifiedMovieRepository
+        NotifiedMovieRepository notifiedMovieRepository,
+        @Value("${movie.polling.min-rating:6.5}") double minRating
     ) {
         this.restClient = restClient;
         this.notificationService = notificationService;
         this.notifiedMovieRepository = notifiedMovieRepository;
+        this.minRating = minRating;
+    }
+
+    /**
+     * Creates the polling service using the default minimum rating of 6.5.
+     *
+     * @param notificationService service used to send push notifications
+     * @param restClient HTTP client used to call YTS
+     * @param notifiedMovieRepository repository used for deduplication persistence
+     */
+    public MoviePollingService(
+        NotificationService notificationService,
+        RestClient restClient,
+        NotifiedMovieRepository notifiedMovieRepository
+    ) {
+        this(notificationService, restClient, notifiedMovieRepository, DEFAULT_MIN_RATING);
     }
 
     /**
@@ -197,7 +217,7 @@ public class MoviePollingService {
      * Determines whether a movie can be notified based on language and rating.
      *
      * @param details movie details payload
-     * @return true when language is English and rating is at least 6.0
+     * @return true when language is English and rating is at least the configured minimum rating
      */
     private boolean isEligibleForNotification(MovieDetailsResponse.Movie details) {
         if (details == null || details.getLanguage() == null || details.getRating() == null) {
@@ -205,7 +225,7 @@ public class MoviePollingService {
         }
 
         return REQUIRED_LANGUAGE.equalsIgnoreCase(details.getLanguage().trim())
-            && details.getRating() >= MIN_RATING;
+            && details.getRating() >= minRating;
     }
 }
 

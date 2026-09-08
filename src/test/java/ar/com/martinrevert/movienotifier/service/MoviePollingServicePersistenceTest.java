@@ -108,7 +108,7 @@ class MoviePollingServicePersistenceTest {
     @Test
     void pollMoviesSkipsNotificationWhenMovieRatingIsBelowMinimum() {
         MovieResponse response = createResponseWithMovie(12345, "Test Movie");
-        MovieDetailsResponse detailsResponse = createDetailsResponse("en", 5.9);
+        MovieDetailsResponse detailsResponse = createDetailsResponse("en", 6.4);
 
         when(restClient.get().uri(anyString()).retrieve().body(eq(MovieResponse.class))).thenReturn(response);
         when(restClient.get().uri(eq("https://yts.bz/api/v2/movie_details.json?movie_id={movieId}"), eq(12345))
@@ -116,6 +116,30 @@ class MoviePollingServicePersistenceTest {
 
         moviePollingService.pollMovies();
 
+        verify(notificationService, never()).sendMovieNotification(anyString(), any(), any(), any(), any(), any());
+        verify(notifiedMovieRepository).saveAndFlush(any(NotifiedMovie.class));
+    }
+
+    @Test
+    void pollMoviesUsesCustomConfiguredMinimumRating() {
+        MoviePollingService customPollingService = new MoviePollingService(
+            notificationService,
+            restClient,
+            notifiedMovieRepository,
+            7.5
+        );
+
+        MovieResponse response = createResponseWithMovie(12345, "Test Movie");
+        MovieDetailsResponse detailsResponse = createDetailsResponse("en", 7.0);
+
+        when(restClient.get().uri(anyString()).retrieve().body(eq(MovieResponse.class))).thenReturn(response);
+        when(restClient.get().uri(eq("https://yts.bz/api/v2/movie_details.json?movie_id={movieId}"), eq(12345))
+            .retrieve().body(eq(MovieDetailsResponse.class))).thenReturn(detailsResponse);
+        when(notifiedMovieRepository.existsById(12345)).thenReturn(false);
+
+        customPollingService.pollMovies();
+
+        // 7.0 is below custom threshold 7.5, so notification should be skipped
         verify(notificationService, never()).sendMovieNotification(anyString(), any(), any(), any(), any(), any());
         verify(notifiedMovieRepository).saveAndFlush(any(NotifiedMovie.class));
     }
