@@ -236,3 +236,4 @@ build/tmp/jar/MANIFEST.MF
 /.gradle/
 /bin/
 /build/
+/.idea
