@@ -3,7 +3,7 @@
 High-performance Spring Boot service that polls YTS and dispatches Firebase Cloud Messaging (FCM) push notifications for new movie releases. Built with Java 25 and GraalVM AOT compilation to support native binaries on both AMD64 and ARM64 (including Raspberry Pi 4).
 
 ![Java 25](https://img.shields.io/badge/Java-25-orange?logo=openjdk)
-![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.4%2B-brightgreen?logo=springboot)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4%2B-brightgreen?logo=springboot)
 ![GraalVM Native](https://img.shields.io/badge/GraalVM-Native%20Image-red?logo=graalvm)
 ![Docker Multi-Arch](https://img.shields.io/badge/Architecture-AMD64%20%7C%20ARM64-blue?logo=docker)
 ![Firebase FCM](https://img.shields.io/badge/Firebase-Cloud%20Messaging-yellow?logo=firebase)
