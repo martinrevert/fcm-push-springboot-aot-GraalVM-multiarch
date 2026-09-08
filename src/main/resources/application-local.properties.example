@@ -5,6 +5,7 @@ server.port=10000
 firebase.service-account-file=serviceAccountKey.json
 movie.polling.min-rating=6.5
 movie.api.base-url=https://movies-api.accel.li/api/v2/
+movie.recent.days-window=15
 
 # Database Configuration (MariaDB / MySQL)
 spring.datasource.driver-class-name=org.mariadb.jdbc.Driver

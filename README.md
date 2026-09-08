@@ -348,6 +348,41 @@ curl -i -X POST "http://localhost:10000/api/subscriptions/unsubscribe?token=dK9.
 
 ---
 
+### 3. Recently Notified Movies
+Returns a JSON array of all movies that triggered a push notification within the last **15 days**,
+ordered from most-recently notified to oldest. No authentication is required.
+
+- **URL**: `GET /api/movies/recent`
+- **Response**: `200 OK` with a JSON array (empty array when no movies were notified recently)
+
+```bash
+curl "http://localhost:10000/api/movies/recent"
+```
+
+**Success Response Body (`200 OK`)**:
+```json
+[
+  {
+    "movieId": 58345,
+    "title": "Inception",
+    "notifiedAt": "2026-09-07T22:10:05"
+  },
+  {
+    "movieId": 57001,
+    "title": "Dune: Part Two",
+    "notifiedAt": "2026-08-31T14:55:22"
+  }
+]
+```
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `movieId` | `integer` | Unique movie identifier from the movies API |
+| `title` | `string` | Movie title at the time of notification |
+| `notifiedAt` | `string` (ISO-8601) | Timestamp when the notification was dispatched |
+
+---
+
 ## Build and Run
 
 ### JVM Mode
