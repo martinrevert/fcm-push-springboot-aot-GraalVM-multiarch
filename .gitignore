@@ -237,3 +237,4 @@ build/tmp/jar/MANIFEST.MF
 /bin/
 /build/
 /.idea
+/src/main/resources/application-local.properties
