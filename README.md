@@ -1,29 +1,55 @@
 # Movie Notifier
 
-Spring Boot service that polls YTS and sends Firebase Cloud Messaging (FCM) push notifications for new movies.
+High-performance Spring Boot service that polls YTS and dispatches Firebase Cloud Messaging (FCM) push notifications for new movie releases. Built with Java 25 and GraalVM AOT compilation to support native binaries on both AMD64 and ARM64 (including Raspberry Pi 4).
 
-## What It Does
+![Java 25](https://img.shields.io/badge/Java-25-orange?logo=openjdk)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.4%2B-brightgreen?logo=springboot)
+![GraalVM Native](https://img.shields.io/badge/GraalVM-Native%20Image-red?logo=graalvm)
+![Docker Multi-Arch](https://img.shields.io/badge/Architecture-AMD64%20%7C%20ARM64-blue?logo=docker)
+![Firebase FCM](https://img.shields.io/badge/Firebase-Cloud%20Messaging-yellow?logo=firebase)
+![MariaDB](https://img.shields.io/badge/Database-MariaDB-informational?logo=mariadb)
 
-- Polls YTS on a configurable schedule.
-- Persists notified movie IDs in `notified_movies` to avoid resend after restart.
-- Manages FCM subscriptions through a single REST controller.
-- Sends cross-platform push payloads (notification + data) via Firebase Admin SDK.
-- Removes invalid/uninstalled device tokens when FCM returns terminal token errors.
-- Supports JVM run and GraalVM native builds (AMD64 and ARM64).
+---
 
-## Project Layout
+## Table of Contents
 
-- Entrypoint: `src/main/java/ar/com/martinrevert/movienotifier/MovieNotifierApplication.java`
-- Config package: `src/main/java/ar/com/martinrevert/movienotifier/config` (`DataSourceConfig`, `RestClientConfig`, `FirebaseConfig`, `SchedulingConfig`)
-- Controller package: `src/main/java/ar/com/martinrevert/movienotifier/controller` (`SubscriptionController`)
-- Service package: `src/main/java/ar/com/martinrevert/movienotifier/service` (`SubscriptionService`, `MoviePollingService`, `NotificationService`)
-- Repository package: `src/main/java/ar/com/martinrevert/movienotifier/repository` (`SubscriptionRepository`, `NotifiedMovieRepository`)
-- Model package: `src/main/java/ar/com/martinrevert/movienotifier/model` (`Subscription`, `NotifiedMovie`, `MovieResponse`)
-- Runtime config file: `src/main/resources/application.properties`
-- Native reflection config: `src/main/resources/META-INF/native-image/ar.com.martinrevert/movie-notifier/reflect-config.json`
-- Native build script: `build-native.sh`
+- [Overview & Key Features](#overview--key-features)
+- [System Architecture](#system-architecture)
+- [Project Layout](#project-layout)
+- [Service Flows](#service-flows)
+  - [1. Subscribe (Idempotent)](#1-subscribe-idempotent)
+  - [2. Unsubscribe](#2-unsubscribe)
+  - [3. Poll & Deduplicate](#3-poll--deduplicate)
+  - [4. Notification Delivery & Self-Healing Tokens](#4-notification-delivery--self-healing-tokens)
+- [Quickstart: Local Development](#quickstart-local-development)
+- [Configuration Reference](#configuration-reference)
+- [REST API Reference](#rest-api-reference)
+- [Build and Run](#build-and-run)
+  - [JVM Mode](#jvm-mode)
+  - [Native AMD64 Build](#native-amd64-build)
+  - [Native ARM64 Multi-Arch Build (Docker Buildx)](#native-arm64-multi-arch-build-docker-buildx)
+- [Production Deployment](#production-deployment)
+  - [Option 1: Docker CLI](#1-docker-run-cli)
+  - [Option 2: Docker Compose](#2-docker-compose)
+  - [Option 3: Portainer](#3-portainer)
+  - [Option 4: Bare-Metal / Linux VM (Systemd)](#4-bare-metal--linux-vm-systemd)
+- [Troubleshooting & FAQ](#troubleshooting--faq)
+- [Security & Best Practices](#security--best-practices)
 
-## Architecture
+---
+
+## Overview & Key Features
+
+- **Scheduled Movie Polling**: Regularly checks the YTS API on a configurable fixed-rate interval.
+- **Duplicate Prevention**: Persists processed movie IDs in a dedicated MariaDB table (`notified_movies`) to prevent duplicate alerts across application restarts.
+- **Idempotent Subscription Management**: Devices subscribe via a single REST endpoint; duplicate registrations are handled idempotently even under high concurrency.
+- **Self-Healing Token Cleanup**: Automatically prunes stale, unregistered, or uninstalled device tokens when Firebase returns terminal registration errors (`UNREGISTERED`, `SENDER_ID_MISMATCH`).
+- **Sub-Second Native Image**: Compiles to a GraalVM native executable with near-instant startup, minimal RAM footprint, and virtual thread readiness.
+- **Cross-Platform Native Builds**: Includes an automated Docker Buildx pipeline for producing ARM64 native binaries with conservative CPU baselines (optimized for Raspberry Pi 4).
+
+---
+
+## System Architecture
 
 ```mermaid
 flowchart LR
@@ -51,9 +77,46 @@ flowchart LR
     NotifSvc -->|remove invalid token| SubSvc
 ```
 
+---
+
+## Project Layout
+
+```text
+├── build-native.sh                             # Multi-architecture native build script
+├── build.gradle                                # Build script, dependencies, and GraalVM settings
+├── src/main/java/ar/com/martinrevert/movienotifier/
+│   ├── MovieNotifierApplication.java           # Spring Boot application entrypoint
+│   ├── config/
+│   │   ├── DataSourceConfig.java               # MariaDB Hikari connection pool configuration
+│   │   ├── FirebaseConfig.java                 # Firebase Admin SDK initialization
+│   │   ├── RestClientConfig.java               # HTTP client logging & setup
+│   │   └── SchedulingConfig.java               # Spring task scheduler enabling
+│   ├── controller/
+│   │   └── SubscriptionController.java         # REST endpoints for subscribe / unsubscribe
+│   ├── model/
+│   │   ├── MovieResponse.java                  # YTS API response DTO models
+│   │   ├── NotifiedMovie.java                  # JPA entity for tracking notified movie IDs
+│   │   └── Subscription.java                   # JPA entity for client device tokens
+│   ├── repository/
+│   │   ├── NotifiedMovieRepository.java        # Spring Data repository for notified movies
+│   │   └── SubscriptionRepository.java         # Spring Data repository for subscribers
+│   └── service/
+│       ├── MoviePollingService.java            # Periodic polling & novel movie detection
+│       ├── NotificationService.java            # FCM message dispatching & error handling
+│       └── SubscriptionService.java            # Subscription persistence & idempotency handling
+└── src/main/resources/
+    ├── application.properties                  # Base configuration with environment variable placeholders
+    ├── application-local.properties.example    # Template for local developer settings
+    └── META-INF/native-image/...               # GraalVM reflection configuration
+```
+
+---
+
 ## Service Flows
 
-### 1) Subscribe (idempotent)
+### 1. Subscribe (Idempotent)
+
+Handles new registrations and concurrent duplicate registration races gracefully without throwing unique constraint violations back to clients:
 
 ```mermaid
 sequenceDiagram
@@ -88,7 +151,11 @@ sequenceDiagram
     Ctrl-->>C: 200 OK + Subscription JSON
 ```
 
-### 2) Unsubscribe
+---
+
+### 2. Unsubscribe
+
+Removes a device token if it exists; no-op if the token is already gone:
 
 ```mermaid
 sequenceDiagram
@@ -110,7 +177,11 @@ sequenceDiagram
     Ctrl-->>C: 204 No Content
 ```
 
-### 3) Poll and dedupe using `notified_movies`
+---
+
+### 3. Poll & Deduplicate
+
+Retrieves the latest releases from YTS, verifies each ID against the database, and only notifies users for previously unseen movies:
 
 ```mermaid
 sequenceDiagram
@@ -137,7 +208,11 @@ sequenceDiagram
     end
 ```
 
-### 4) Notification send and invalid-token cleanup
+---
+
+### 4. Notification Delivery & Self-Healing Tokens
+
+Sends cross-platform push notifications to all registered devices. Terminal error responses from FCM trigger automatic database cleanup:
 
 ```mermaid
 sequenceDiagram
@@ -166,152 +241,306 @@ sequenceDiagram
     end
 ```
 
-## REST API
+---
+
+## Quickstart: Local Development
+
+Getting the project running locally takes three quick steps:
+
+### Step 1: Provide Firebase Credentials
+1. Go to your [Firebase Console](https://console.firebase.google.com/) > **Project settings** > **Service accounts**.
+2. Under **Firebase Admin SDK**, select **Java** and click **Generate new private key**.
+3. Save the downloaded file as `serviceAccountKey.json` in the root of your project:
+   ```text
+   ./serviceAccountKey.json
+   ```
+   *(This file is already ignored by `.gitignore` to prevent accidental credential commits).*
+
+### Step 2: Configure Local Database Properties
+Copy the example properties template:
+```bash
+cp src/main/resources/application-local.properties.example src/main/resources/application-local.properties
+```
+
+Open `src/main/resources/application-local.properties` and adjust your database connection details:
+```properties
+server.port=10000
+firebase.service-account-file=serviceAccountKey.json
+spring.datasource.driver-class-name=org.mariadb.jdbc.Driver
+spring.datasource.url=jdbc:mariadb://localhost:3306/subscriptions?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+spring.datasource.username=your_local_db_user
+spring.datasource.password=your_local_db_password
+```
+
+> [!TIP]
+> `application.properties` includes `spring.config.import=optional:classpath:application-local.properties`. When `application-local.properties` exists locally, Spring Boot imports it automatically without needing command-line profile arguments.
+
+### Step 3: Run the Application
+```bash
+./gradlew bootRun
+```
+
+The application will start Tomcat on port `10000` and immediately perform its first polling cycle.
+
+---
+
+## Configuration Reference
+
+The application follows the 12-Factor methodology. All configuration settings are defined in [`src/main/resources/application.properties`](src/main/resources/application.properties) and can be overridden via environment variables:
+
+| Environment Variable | Property Key | Default / Fallback | Description |
+| :--- | :--- | :--- | :--- |
+| `SERVER_PORT` | `server.port` | `10000` | HTTP listening port for the REST API |
+| `FIREBASE_SERVICE_ACCOUNT_FILE` | `firebase.service-account-file` | `${GOOGLE_APPLICATION_CREDENTIALS}` | Path to Firebase service account JSON |
+| `GOOGLE_APPLICATION_CREDENTIALS` | `firebase.service-account-file` | - | Standard GCP credentials path fallback |
+| `SPRING_DATASOURCE_DRIVER_CLASS_NAME` | `spring.datasource.driver-class-name` | `org.mariadb.jdbc.Driver` | Database JDBC driver class |
+| `SPRING_DATASOURCE_URL` | `spring.datasource.url` | - | Full JDBC connection URL with parameters |
+| `SPRING_DATASOURCE_USERNAME` | `spring.datasource.username` | - | Database username |
+| `SPRING_DATASOURCE_PASSWORD` | `spring.datasource.password` | - | Database password |
+| - | `movie.polling.fixed-rate-ms` | `60000` | YTS polling interval in milliseconds |
+
+---
+
+## REST API Reference
 
 Base path: `/api/subscriptions`
 
-### Subscribe
+### 1. Register Subscription
+Registers a client device token to receive movie push notifications.
 
-- `POST /api/subscriptions/subscribe?token=<FCM_REGISTRATION_TOKEN>`
-- Returns `200 OK` and `Subscription` JSON.
-- Repeating the same token is idempotent (returns existing subscription).
+- **URL**: `POST /api/subscriptions/subscribe`
+- **Query Parameter**: `token=<FCM_REGISTRATION_TOKEN>` (required)
+- **Response**: `200 OK`
 
 ```bash
-curl -X POST "http://localhost:10000/api/subscriptions/subscribe?token=<FCM_REGISTRATION_TOKEN>"
+curl -X POST "http://localhost:10000/api/subscriptions/subscribe?token=dK9...fcm_token_here"
 ```
 
-### Unsubscribe
-
-- `POST /api/subscriptions/unsubscribe?token=<FCM_REGISTRATION_TOKEN>`
-- Returns `204 No Content`.
-
-```bash
-curl -i -X POST "http://localhost:10000/api/subscriptions/unsubscribe?token=<FCM_REGISTRATION_TOKEN>"
+**Success Response Body (`200 OK`)**:
+```json
+{
+  "id": 1,
+  "registrationToken": "dK9...fcm_token_here",
+  "subscribedAt": "2026-09-08T12:00:00"
+}
 ```
 
-Validation:
+---
 
-- Missing or blank `token` returns `400 Bad Request`.
+### 2. Unsubscribe
+Removes a client device token from future notifications.
 
-## Configuration
-
-Main file: `src/main/resources/application.properties`
-
-- `server.port=${SERVER_PORT:10000}`
-- `spring.threads.virtual.enabled=true`
-- `movie.polling.fixed-rate-ms=60000`
-- `firebase.service-account-file=${FIREBASE_SERVICE_ACCOUNT_FILE:${GOOGLE_APPLICATION_CREDENTIALS:serviceAccountKey.json}}`
-- `spring.datasource.url=${SPRING_DATASOURCE_URL:...}`
-- `spring.datasource.username=${SPRING_DATASOURCE_USERNAME:kodi}`
-- `spring.datasource.password=${SPRING_DATASOURCE_PASSWORD:kodi}`
-
-Environment variables take precedence over defaults because properties use `${ENV_VAR:default}` syntax.
-
-## Build and Run (Java 25)
-
-### JVM
+- **URL**: `POST /api/subscriptions/unsubscribe`
+- **Query Parameter**: `token=<FCM_REGISTRATION_TOKEN>` (required)
+- **Response**: `204 No Content`
 
 ```bash
-cd /path/to/movie-notifier
+curl -i -X POST "http://localhost:10000/api/subscriptions/unsubscribe?token=dK9...fcm_token_here"
+```
+
+**Validation**:
+- Passing a blank or missing `token` parameter returns `400 Bad Request`.
+
+---
+
+## Build and Run
+
+### JVM Mode
+Requires Java 25:
+```bash
 ./gradlew clean test
 ./gradlew bootRun
 ```
 
-### Native AMD64
+---
 
+### Native AMD64 Build
+Compiles a native binary for x86_64 machines (requires GraalVM 25 installed locally):
 ```bash
-cd /path/to/movie-notifier
 ./build-native.sh
 ./build/native/nativeCompile/movie-notifier-native
 ```
 
-### Native ARM64 (cross-build with Docker Buildx)
+---
+
+### Native ARM64 Multi-Arch Build (Docker Buildx)
+Cross-compiles a native binary and packaging an ARM64 container image using Docker Buildx (no local ARM hardware required):
 
 ```bash
-cd /path/to/movie-notifier
 ./build-native.sh aarch64
-file build/native/nativeCompile/movie-notifier-native
+```
+
+This generates two artifacts in a single build:
+1. **Native Binary**: `build/native/nativeCompile/movie-notifier-native` (ARM64 executable).
+2. **Docker Image Archive**: `build/native/docker/movie-notifier-native-latest-arm64.tar`.
+
+Load and run the built image locally:
+```bash
 docker load -i build/native/docker/movie-notifier-native-latest-arm64.tar
 ```
 
-The ARM64 flow now exports two artifacts in one run:
+#### Build Configuration Options:
+You can pass custom environment variables to `./build-native.sh`:
 
-- Native binary: `build/native/nativeCompile/movie-notifier-native`
-- Docker image archive (ready to import/push): `build/native/docker/movie-notifier-native-latest-arm64.tar`
+| Environment Variable | Default Value | Description |
+| :--- | :--- | :--- |
+| `IMAGE_REPO` | `movie-notifier-native` | Custom repository/image name for the Docker image |
+| `IMAGE_TAG` | `latest` | Image tag for the Docker image |
+| `IMAGE_TAR_PATH` | `build/native/docker/...` | Output file path for the exported image archive |
+| `ARM64_MARCH` | `compatibility` | CPU baseline instruction set architecture for ARM64 |
+| `ARM64_NO_CACHE` | `false` | Set to `true` or pass `--no-cache` to force a clean Docker build |
 
-Default image tag inside archive:
-
-- `movie-notifier-native:latest-arm64`
-
-Optional overrides:
-
-- `IMAGE_REPO` (example: `your-dockerhub-user/movie-notifier`)
-- `IMAGE_TAG` (example: `v1.0.0`)
-- `IMAGE_TAR_PATH` (custom archive output path)
-- `ARM64_MARCH` (default `compatibility`, broadest ARM runtime compatibility)
-- `ARM64_NO_CACHE` (`true`/`1` to force fresh Docker Buildx rebuild)
-
-Example for Docker Hub:
-
+**Example: Building and publishing to Docker Hub:**
 ```bash
-cd /path/to/movie-notifier
 IMAGE_REPO=your-dockerhub-user/movie-notifier IMAGE_TAG=v1.0.0 ./build-native.sh aarch64
 docker load -i build/native/docker/movie-notifier-native-v1.0.0-arm64.tar
 docker push your-dockerhub-user/movie-notifier:v1.0.0-arm64
 ```
 
-Example with explicit Raspberry Pi 4 baseline:
+> [!IMPORTANT]
+> **Raspberry Pi 4 Compatibility**: The default `ARM64_MARCH=compatibility` ensures that GraalVM does not require newer ARMv8.1+ instructions (like `LSE` atomics) that crash on Cortex-A72 processors (Raspberry Pi 4).
+
+---
+
+## Production Deployment
+
+In production, avoid baking secrets into Docker images or committing credentials. Inject credentials via environment variables and read-only secret volume mounts.
+
+### 1. Docker Run (CLI)
 
 ```bash
-cd /path/to/movie-notifier
-ARM64_MARCH=compatibility ./build-native.sh aarch64
+docker run -d \
+  --name movie-notifier \
+  --restart unless-stopped \
+  -p 10000:10000 \
+  -e SERVER_PORT=10000 \
+  -e SPRING_DATASOURCE_DRIVER_CLASS_NAME=org.mariadb.jdbc.Driver \
+  -e SPRING_DATASOURCE_URL="jdbc:mariadb://db-host:3306/subscriptions?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC" \
+  -e SPRING_DATASOURCE_USERNAME="your_db_user" \
+  -e SPRING_DATASOURCE_PASSWORD="your_db_password" \
+  -e FIREBASE_SERVICE_ACCOUNT_FILE="/secrets/serviceAccountKey.json" \
+  -v /path/to/production/serviceAccountKey.json:/secrets/serviceAccountKey.json:ro \
+  your-repo/movie-notifier-native:latest
 ```
 
-Example forcing a fresh ARM64 rebuild (avoid stale layers/artifacts):
+---
 
-```bash
-cd /path/to/movie-notifier
-./build-native.sh aarch64 --no-cache
+### 2. Docker Compose
+
+```yaml
+services:
+  movie-notifier:
+    image: your-repo/movie-notifier-native:latest
+    container_name: movie-notifier
+    ports:
+      - "10000:10000"
+    environment:
+      SERVER_PORT: 10000
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.mariadb.jdbc.Driver
+      SPRING_DATASOURCE_URL: jdbc:mariadb://db-host:3306/subscriptions?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: your_db_user
+      SPRING_DATASOURCE_PASSWORD: your_db_password
+      FIREBASE_SERVICE_ACCOUNT_FILE: /secrets/serviceAccountKey.json
+    volumes:
+      - /path/to/production/serviceAccountKey.json:/secrets/serviceAccountKey.json:ro
+    restart: unless-stopped
 ```
 
-Notes:
+---
 
-- Use `./build-native.sh` (not a Gradle task name).
-- Runtime files are copied to `build/native/nativeCompile`:
-  - `application.properties`
-  - `serviceAccountKey.json` (if present)
-- ARM64 docker archive contains native binary, `application.properties`, and `serviceAccountKey.json` from project root.
-- To use a mounted secret instead, set `FIREBASE_SERVICE_ACCOUNT_FILE` (or `GOOGLE_APPLICATION_CREDENTIALS`) to that mounted path.
-- Native image build threads are currently configured in `build.gradle`:
-  - `-H:NumberOfThreads=6`
+### 3. Portainer
 
-## Portainer (run the native image)
+When deploying using the Portainer Web UI:
+1. **Container Image**: Point to `your-repo/movie-notifier-native:latest` (or load your ARM64 archive).
+2. **Port mapping**: Map host `10000` to container `10000`.
+3. **Environment Variables**: Add:
+   - `SERVER_PORT=10000`
+   - `SPRING_DATASOURCE_DRIVER_CLASS_NAME=org.mariadb.jdbc.Driver`
+   - `SPRING_DATASOURCE_URL=jdbc:mariadb://db-host:3306/subscriptions?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC`
+   - `SPRING_DATASOURCE_USERNAME=your_db_user`
+   - `SPRING_DATASOURCE_PASSWORD=your_db_password`
+   - `FIREBASE_SERVICE_ACCOUNT_FILE=/secrets/serviceAccountKey.json`
+4. **Volume Mount**: Bind mount host path `/path/to/serviceAccountKey.json` to container path `/secrets/serviceAccountKey.json` in read-only mode.
 
-If you export/publish your image and deploy with Portainer, run the container with port mapping `10000:10000` and provide required env vars (or mount config/secret files):
+---
 
-- `SERVER_PORT=10000` (optional, default already 10000)
-- `SPRING_DATASOURCE_URL`
-- `SPRING_DATASOURCE_USERNAME`
-- `SPRING_DATASOURCE_PASSWORD`
-- Firebase service account file available in container path expected by `firebase.service-account-file`
+### 4. Bare-Metal / Linux VM (Systemd)
 
-## Troubleshooting
+If executing the native binary directly on a Linux host (Ubuntu, Debian, Raspberry Pi OS):
 
-- `Task 'runBoot' not found`
-  - Use `./gradlew bootRun`.
-- Native binary missing after build
-  - Re-run `./build-native.sh` and verify `build/native/nativeCompile/movie-notifier-native`.
-- Raspberry Pi 4 exits with `required CPU features ... [FP, ASIMD, CRC32, LSE]`
-  - Rebuild ARM64 with a conservative ISA baseline:
-    - `ARM64_MARCH=compatibility ./build-native.sh aarch64`
-  - If needed, verify what was used in the build logs (`Native image CPU baseline used: -march=...`).
-- FCM send returns recipient/token errors
-  - Verify client token, Firebase project credentials, and that token belongs to the same sender/project.
-- Duplicate push after restart
-  - Verify `notified_movies` table persists and `spring.jpa.hibernate.ddl-auto` is not dropping schema.
+1. Place the compiled binary in `/opt/movie-notifier/movie-notifier-native` and make it executable:
+   ```bash
+   sudo chmod +x /opt/movie-notifier/movie-notifier-native
+   ```
+2. Place `serviceAccountKey.json` in `/opt/movie-notifier/serviceAccountKey.json` and restrict permissions:
+   ```bash
+   sudo chmod 600 /opt/movie-notifier/serviceAccountKey.json
+   ```
+3. Create `/etc/systemd/system/movie-notifier.service`:
+   ```ini
+   [Unit]
+   Description=Movie Notifier Native Service
+   After=network.target
 
-## Security Reminder
+   [Service]
+   Type=simple
+   User=movie-notifier
+   WorkingDirectory=/opt/movie-notifier
+   ExecStart=/opt/movie-notifier/movie-notifier-native
+   Environment=SERVER_PORT=10000
+   Environment=SPRING_DATASOURCE_DRIVER_CLASS_NAME=org.mariadb.jdbc.Driver
+   Environment=SPRING_DATASOURCE_URL=jdbc:mariadb://db-host:3306/subscriptions?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+   Environment=SPRING_DATASOURCE_USERNAME=your_db_user
+   Environment=SPRING_DATASOURCE_PASSWORD=your_db_password
+   Environment=FIREBASE_SERVICE_ACCOUNT_FILE=/opt/movie-notifier/serviceAccountKey.json
+   Restart=always
+   RestartSec=10
 
-- Do not commit production secrets.
-- Keep `serviceAccountKey.json` private.
-- Prefer environment-based DB credentials in production.
+   [Install]
+   WantedBy=multi-user.target
+   ```
+4. Start and enable the service:
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now movie-notifier
+   ```
+
+> [!NOTE]
+> Spring Boot also supports external configuration files. Any `application.properties` file located in the same directory as the native binary (or in a `./config/` subdirectory) will automatically take precedence.
+
+---
+
+## Troubleshooting & FAQ
+
+### `Task 'runBoot' not found`
+- **Cause**: Gradle command typo.
+- **Solution**: Use `./gradlew bootRun`.
+
+### Raspberry Pi 4 exits with `required CPU features ... [FP, ASIMD, CRC32, LSE]`
+- **Cause**: The native binary was compiled with an instruction set baseline that expects ARMv8.1 Large System Extensions (`LSE`), which the Raspberry Pi 4 Cortex-A72 CPU lacks.
+- **Solution**: Recompile using the compatibility baseline:
+  ```bash
+  ARM64_MARCH=compatibility ./build-native.sh aarch64 --no-cache
+  ```
+
+### `Firebase service account file not found`
+- **Cause**: The application cannot find a readable file at the path specified by `firebase.service-account-file`.
+- **Solution**:
+  - In local development: Place `serviceAccountKey.json` in the root folder.
+  - In Docker: Ensure your volume mount matches `FIREBASE_SERVICE_ACCOUNT_FILE` (e.g. `/secrets/serviceAccountKey.json`).
+
+### FCM dispatch returns recipient / token errors
+- **Cause**: The client registration token is invalid, expired, or belongs to a different Firebase Project than the private key in `serviceAccountKey.json`.
+- **Solution**: Verify that client apps connect to the same Firebase project whose credentials are used by the backend. The service will automatically delete tokens that return terminal errors.
+
+### Duplicate pushes after service restart
+- **Cause**: The `notified_movies` table was cleared or recreated.
+- **Solution**: Ensure your database is persistent and that `spring.jpa.hibernate.ddl-auto` is set to `update` (never `create` or `create-drop` in production).
+
+---
+
+## Security & Best Practices
+
+- **Never Commit Secrets**: Ensure `serviceAccountKey.json` and `src/main/resources/application-local.properties` remain in [.gitignore](.gitignore).
+- **Read-Only Secret Mounts**: When deploying via Docker or Kubernetes, mount the service account credential with `:ro` (read-only) permissions.
+- **Least Privilege DB Users**: Create a dedicated database user with permissions scoped exclusively to the `subscriptions` database.

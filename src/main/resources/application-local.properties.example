@@ -1,0 +1,11 @@
+# Local Development Configuration Example
+# Copy this file to src/main/resources/application-local.properties and customize the values for your environment.
+
+server.port=10000
+firebase.service-account-file=serviceAccountKey.json
+
+# Database Configuration (MariaDB / MySQL)
+spring.datasource.driver-class-name=org.mariadb.jdbc.Driver
+spring.datasource.url=jdbc:mariadb://localhost:3306/subscriptions?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+spring.datasource.username=your_db_user
+spring.datasource.password=your_db_password
