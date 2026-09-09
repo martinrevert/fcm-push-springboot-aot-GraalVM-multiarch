@@ -1,0 +1,21 @@
+FROM ghcr.io/graalvm/native-image-community:25 AS builder
+WORKDIR /app
+COPY . .
+# Install dependencies for gradlew (findutils provides xargs)
+RUN microdnf install -y findutils bash
+RUN chmod +x gradlew
+# Run native build (CLEAN first to avoid stale AOT classes)
+# Force Gradle to use the container's Java install instead of host-specific paths.
+RUN export JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")" &&     export GRADLE_USER_HOME="/root/.gradle" &&     export GRADLE_OPTS="-Xmx6g -Xms512m -XX:MaxMetaspaceSize=1g -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Dorg.gradle.caching=true -Dorg.gradle.configuration-cache=true" &&     export JAVA_TOOL_OPTIONS="-XX:ActiveProcessorCount=2 -Xmx6g -Xms512m -XX:MaxMetaspaceSize=1g" &&     ./gradlew --no-daemon --build-cache --configuration-cache --parallel --max-workers=2 nativeCompile       -Dorg.gradle.jvmargs="-Xmx6g -Xms512m -XX:MaxMetaspaceSize=1g -Dorg.gradle.daemon=false -Dorg.gradle.caching=true -Dorg.gradle.configuration-cache=true"       -PnativeTargetArch=arm64       -PnativeArmMarch="compatibility"       -Dorg.gradle.java.installations.paths="$JAVA_HOME"       -Dorg.gradle.java.installations.auto-download=false
+
+FROM scratch AS binary-export
+COPY --from=builder /app/build/native/nativeCompile/movie-notifier-native /
+
+FROM debian:bookworm-slim AS runtime
+WORKDIR /opt/movie-notifier
+COPY --from=builder /app/build/native/nativeCompile/movie-notifier-native ./movie-notifier-native
+COPY --from=builder /app/src/main/resources/application.properties ./application.properties
+# Firebase credentials are mounted as a Docker volume at runtime and are intentionally not baked into the image.
+RUN chmod +x /opt/movie-notifier/movie-notifier-native
+EXPOSE 10000
+ENTRYPOINT ["/opt/movie-notifier/movie-notifier-native"]

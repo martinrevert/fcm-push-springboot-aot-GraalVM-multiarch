@@ -48,9 +48,13 @@ bootJar {
 // To build a native image, run: ./gradlew nativeCompile
 
 graalvmNative {
+    metadataRepository {
+        enabled = true
+    }
+
     // Keep toolchain detection enabled so nativeCompile can resolve javaLauncher.
     toolchainDetection = true
-    
+
     binaries {
         main {
             def nativeTargetArch = providers.gradleProperty('nativeTargetArch')
