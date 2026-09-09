@@ -10,24 +10,46 @@ BINARY_PATH="$OUTPUT_DIR/$BINARY_NAME"
 ARM64_GRAALVM_IMAGE="ghcr.io/graalvm/native-image-community:25"
 IMAGE_PLATFORM="linux/arm64"
 ARM64_MARCH="${ARM64_MARCH:-compatibility}"
+MAX_RAM_GB="${MAX_RAM_GB:-8}"
+GRADLE_WORKERS="${GRADLE_WORKERS:-2}"
+GRADLE_HEAP_XMX="${GRADLE_HEAP_XMX:-6g}"
+GRADLE_USER_HOME="${GRADLE_USER_HOME:-$SCRIPT_DIR/.gradle}"
+BUILDX_CACHE_DIR="${BUILDX_CACHE_DIR:-$SCRIPT_DIR/.buildx-cache}"
 IMAGE_REPO="${IMAGE_REPO:-movie-notifier-native}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 IMAGE_NAME_ARM64="${IMAGE_REPO}:${IMAGE_TAG}-arm64"
 IMAGE_TAR_PATH="${IMAGE_TAR_PATH:-build/native/docker/${BINARY_NAME}-${IMAGE_TAG}-arm64.tar}"
 BUILDER_NAME="movie-notifier-builder"
 ARM64_NO_CACHE="${ARM64_NO_CACHE:-false}"
-BUILDX_CACHE_ARGS=()
+BUILDX_CACHE_ARGS=(--cache-from=type=local,src="$BUILDX_CACHE_DIR" --cache-to=type=local,mode=max,dest="$BUILDX_CACHE_DIR")
+
+mkdir -p "$GRADLE_USER_HOME"
+mkdir -p "$BUILDX_CACHE_DIR"
+export GRADLE_USER_HOME
+
+# Keep the native compilation under ~8 GiB total memory to avoid swapping.
+# Prefer a smaller heap than the host RAM cap, leaving headroom for the OS and Docker.
+export GRADLE_OPTS="-Xmx${GRADLE_HEAP_XMX} -Xms512m -XX:MaxMetaspaceSize=1g -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=${GRADLE_WORKERS}"
+export JAVA_TOOL_OPTIONS="-XX:ActiveProcessorCount=${GRADLE_WORKERS} -Xmx${GRADLE_HEAP_XMX} -Xms512m -XX:MaxMetaspaceSize=1g"
+
+# Default to a safer, lower-memory build profile so the command is simple for day-to-day use.
+if [ -z "${MAX_RAM_GB:-}" ]; then
+    MAX_RAM_GB=8
+fi
+if [ -z "${GRADLE_WORKERS:-}" ]; then
+    GRADLE_WORKERS=2
+fi
+if [ -z "${GRADLE_HEAP_XMX:-}" ]; then
+    GRADLE_HEAP_XMX=6g
+fi
 
 copy_runtime_artifacts() {
     mkdir -p "$OUTPUT_DIR"
-    if [ -f "serviceAccountKey.json" ]; then
-        cp serviceAccountKey.json "$OUTPUT_DIR/"
-        echo "Copied serviceAccountKey.json."
-    fi
     if [ -f "src/main/resources/application.properties" ]; then
         cp src/main/resources/application.properties "$OUTPUT_DIR/"
         echo "Copied application.properties to $OUTPUT_DIR/."
     fi
+    echo "Firebase credentials are expected to be mounted as a Docker volume at runtime; not copied into the image."
 }
 
 write_native_dockerfile() {
@@ -41,7 +63,11 @@ RUN chmod +x gradlew
 # Run native build (CLEAN first to avoid stale AOT classes)
 # Force Gradle to use the container's Java install instead of host-specific paths.
 RUN export JAVA_HOME="\$(dirname "\$(dirname "\$(readlink -f "\$(command -v java)")")")" && \
-    ./gradlew clean nativeCompile --no-daemon \
+    export GRADLE_USER_HOME="/root/.gradle" && \
+    export GRADLE_OPTS="-Xmx${GRADLE_HEAP_XMX} -Xms512m -XX:MaxMetaspaceSize=1g -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=${GRADLE_WORKERS} -Dorg.gradle.caching=true -Dorg.gradle.configuration-cache=true" && \
+    export JAVA_TOOL_OPTIONS="-XX:ActiveProcessorCount=${GRADLE_WORKERS} -Xmx${GRADLE_HEAP_XMX} -Xms512m -XX:MaxMetaspaceSize=1g" && \
+    ./gradlew --no-daemon --build-cache --configuration-cache --parallel --max-workers=${GRADLE_WORKERS} nativeCompile \
+      -Dorg.gradle.jvmargs="-Xmx${GRADLE_HEAP_XMX} -Xms512m -XX:MaxMetaspaceSize=1g -Dorg.gradle.daemon=false -Dorg.gradle.caching=true -Dorg.gradle.configuration-cache=true" \
       -PnativeTargetArch=arm64 \
       -PnativeArmMarch="$ARM64_MARCH" \
       -Dorg.gradle.java.installations.paths="\$JAVA_HOME" \
@@ -54,7 +80,7 @@ FROM debian:bookworm-slim AS runtime
 WORKDIR /opt/movie-notifier
 COPY --from=builder /app/build/native/nativeCompile/movie-notifier-native ./movie-notifier-native
 COPY --from=builder /app/src/main/resources/application.properties ./application.properties
-COPY --from=builder /app/serviceAccountKey.json ./serviceAccountKey.json
+# Firebase credentials are mounted as a Docker volume at runtime and are intentionally not baked into the image.
 RUN chmod +x /opt/movie-notifier/movie-notifier-native
 EXPOSE 10000
 ENTRYPOINT ["/opt/movie-notifier/movie-notifier-native"]
@@ -102,7 +128,7 @@ build_arm64() {
     echo "Starting ARM64 build using Docker..."
     echo "Using ARM64 native baseline: -march=$ARM64_MARCH"
     if [ "${#BUILDX_CACHE_ARGS[@]}" -gt 0 ]; then
-        echo "Docker Buildx cache mode: disabled (--no-cache --pull)"
+        echo "Docker Buildx cache mode: enabled (local cache reused from $BUILDX_CACHE_DIR)"
     fi
     mkdir -p "$OUTPUT_DIR"
     mkdir -p "$(dirname "$IMAGE_TAR_PATH")"
@@ -121,6 +147,8 @@ build_arm64() {
         "${BUILDX_CACHE_ARGS[@]}" \
         --platform "$IMAGE_PLATFORM" \
         --target binary-export \
+        --memory "${MAX_RAM_GB}g" \
+        --memory-swap "${MAX_RAM_GB}g" \
         -f Dockerfile.native \
         --output type=local,dest="$OUTPUT_DIR" \
         .
@@ -139,6 +167,8 @@ build_arm64() {
         "${BUILDX_CACHE_ARGS[@]}" \
         --platform "$IMAGE_PLATFORM" \
         --target runtime \
+        --memory "${MAX_RAM_GB}g" \
+        --memory-swap "${MAX_RAM_GB}g" \
         -f Dockerfile.native \
         -t "$IMAGE_NAME_ARM64" \
         --output type=docker,dest="$IMAGE_TAR_PATH" \
@@ -204,7 +234,7 @@ else
     rm -f "$BINARY_PATH"
 
     # Clean first!
-    ./gradlew clean nativeCompile --no-daemon
+    ./gradlew nativeCompile --no-daemon
 
     if [ ! -f "$BINARY_PATH" ]; then
         echo "AMD64 build reported success but binary was not found at '$BINARY_PATH'."
